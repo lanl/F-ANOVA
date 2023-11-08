@@ -23,7 +23,7 @@ Please see the in-depth demo script:
 [Demo Script](Documentation/FANOVA_Example.mlx)
 
 ## Support
-Name: Adam C Watts
+Name: Adam C. Watts
 
 Email: acwatts@lanl.gov
 
