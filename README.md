@@ -4,7 +4,7 @@
 Class and supporting functions to utilize an object oriented approach to F-ANOVA. Class also supports testing for the equality of covariance functions between 2-groups or k-number of groups.
 
 ## Description
-Functional analyis of variance investigates whether categorical variables affect the mean response. OneWay ANOVA investigates how a single categorical variable with different levels affects the mean response. TwoWay ANOVA investigates how a two categorical variables, denoted Primary and Secondary Factors, each with different levels affects the mean response.
+Functional analyis of variance investigates whether categorical variables affect the mean response. OneWay ANOVA investigates how a single categorical variable with k-different levels affects the mean response. TwoWay ANOVA investigates how a two categorical variables, denoted Primary and Secondary Factors, each with different levels affects the mean response.
 
 Run `help functionalANOVA` in MATLAB for full documentation
 
