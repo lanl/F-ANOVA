@@ -844,9 +844,12 @@ classdef testFANOVA < matlab.unittest.TestCase
 
             end
 
-            R_bundle = R_bundle.assignUnits('t', 'minute');
-            R_bundle.setQuantity('t', 'Time', 'data', 'Heart Rate')
-
+            % Make Echo Records
+            if 8==exist('OneD', 'class')
+                R_bundle = R_bundle.assignUnits('t', 'minute');
+                R_bundle.setQuantity('t', 'Time', 'data', 'Heart Rate')
+            end
+            
             DataStruct(4).Data = bundle;
             DataStruct(4).EchoTimeRecords = R_bundle;
             DataStruct(4).samplesPerGroup = n_sub_reals;
