@@ -59,20 +59,6 @@ function PlotCovariances(self, varargin)
 %
 % See also FUNCTIONALANOVA
 
-%{
-© 2023. Triad National Security, LLC. All rights reserved.
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-Department of Energy/National Nuclear Security Administration. All rights in the program are.
-reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-Security Administration. The Government is granted for itself and others acting on its behalf a
-nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare.
-derivative works, distribute copies to the public, perform publicly and display publicly, and to permit.
-others to do so.
-
-Author: Adam Watts (acwatts@lanl.gov)
-%}
-
 p = inputParser;
 
 addParameter(p, 'plotType', 'default', @(x) any(strcmpi(x, {'default', 'primary', 'secondary', 'interaction'})))
@@ -227,18 +213,6 @@ switch plotType
         K = ab;
 
 end
-
-
-
-
-
-% for k = 1 : size(gamma_hat_i, 3)
-%     cmin = min(gamma_hat_i(:, :, k), [], 'all');
-%     cmax = max(gamma_hat_i(:, :, k), [], 'all');
-%     gamma_hat_i(:, :, k) = normalize(gamma_hat_i(:, :, 1), "range", [cmin, cmax]);
-% end
-
-
 
 % Visualize Kernel over entire Domain
 FIG1 = figure('Name', sprintf('%s Covariances Visualized', fig_label), 'units', 'points', 'position', position);

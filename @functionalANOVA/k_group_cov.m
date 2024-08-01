@@ -34,20 +34,7 @@ function pvalue = k_group_cov(self, method, stat, Sigma, V)
 % Revised   Oct 04,   2011, Princeton University, USA
 % Revised   April 30, 2012, Princeton University
 % Modified  May 26,   2023, Los Alamos National Laboratory, USA
-
-
-%{
-© 2023. Triad National Security, LLC. All rights reserved.
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-Department of Energy/National Nuclear Security Administration. All rights in the program are.
-reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-Security Administration. The Government is granted for itself and others acting on its behalf a
-nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare.
-derivative works, distribute copies to the public, perform publicly and display publicly, and to permit.
-others to do so.
-
-%}
+% Modified  July 31,  2024, Los Alamos National Laboratory, USA
 
 %% L2-norm based test
 
@@ -58,8 +45,54 @@ p = self.n_domain_points;
 
 switch method
     case "L2-Simul"
-        % TBD
-        pvalue = nan;
+        q = self.k_groups - 1;
+
+        v_array = cell(1, self.k_groups);
+
+        for K = 1 : self.k_groups
+            v_array{K} = self.data{K} - mean(self.data{K}, 2);  %subject-effect matrix for ith group
+        end
+
+
+        n_array = self.n_i;
+        LHS = 0;
+        tic
+        for ii = 1:self.k_groups
+            n_i = n_array(ii);
+            V = v_array{ii};
+            for jj = 1:n_i
+                v_ij = V(:, jj);
+                LHS = LHS + (v_ij * v_ij') * (v_ij * v_ij');
+            end
+
+        end
+        toc
+
+        LHS = LHS ./ N;
+
+        if size(LHS) == size(Sigma)
+            omega_hat = LHS - Sigma*Sigma;  %  matrix multiplication
+        else % Recalculate Sigma 
+            %% Set up Data Matrix
+            vmu=[]; V=[];
+            for ii=1:self.k_groups
+                yyi=self.data{ii}';
+                mui=mean(yyi);
+                Vi=yyi-ones(self.n_i(ii),1)*mui;
+                vmu=[vmu;mui];
+                V=[V;Vi];
+            end
+            SigmaLarge = V'*V/(self.N-self.k_groups);  %% [m x m] pooled covariance matrix
+            omega_hat = LHS - SigmaLarge*SigmaLarge;  %  matrix multiplication
+        end
+
+        eig_gamma_hat = real(eig(omega_hat));
+        
+        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
+        T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat,  self.N_simul);
+        T_NullFitted = fitdist(T_null, "Kernel");
+        pvalue = 1 - T_NullFitted.cdf(stat);
+
     case "L2-Naive"
         A=trace(Sigma);
         B=trace(Sigma^2);

@@ -39,20 +39,6 @@ function pvalue_matrix = OneWay(self, n_tests, q, eig_gamma_hat, eta_i, eta_gran
 %  History
 %  Initial May 26, 2023 Los Alamos National Laboratory, USA
 
-%{
-© 2023. Triad National Security, LLC. All rights reserved.
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-Department of Energy/National Nuclear Security Administration. All rights in the program are.
-reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-Security Administration. The Government is granted for itself and others acting on its behalf a
-nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare.
-derivative works, distribute copies to the public, perform publicly and display publicly, and to permit.
-others to do so.
-
-Author: Adam Watts (acwatts@lanl.gov)
-%}
-
 n_methods = numel(self.ANOVA_Methods_Used);
 
 pvalue_matrix = zeros(n_tests, n_methods);
@@ -127,19 +113,31 @@ for method = self.ANOVA_Methods_Used   % Generate Test Statistic
             switch self.Hypothesis
                 case "FAMILY"
                     self.hypothesis_LABEL =  pair_vec(1);
-                    T = self.setUpTimeBar(method);
 
-                    d_points = self.n_domain_points;
-                    k_group =  self.k_groups;
-                    n_iii = self.n_i;
-                    g_data = self.data;
-                    n = self.N;
-                    parfor K = 1 : self.N_boot
-                        [eta_i_star, eta_grand_star, ~] = functionalANOVA.GroupBooter(g_data, d_points, k_group, n_iii, n);
-                        T_n_Boot(K) = functionalANOVA.SSH_n_boot(eta_i, eta_grand, eta_i_star, eta_grand_star, n_iii);
-                        T.progress;
+                    yy = [];
+
+                    for K = 1:self.k_groups
+                        yy = [yy; self.data{K}'];
                     end
-                    T.stop; T.delete;
+
+                    [~, ~,  T_n_Boot(:, 1)] = L2Bootstrap(self, yy);
+
+                    % Numerically the same but Faster using the function above
+                    % T = self.setUpTimeBar(method);
+                    % d_points = self.n_domain_points;
+                    % k_group =  self.k_groups;
+                    % n_iii = self.n_i;
+                    % g_data = self.data;
+                    % n = self.N;
+                    % parfor K = 1 : self.N_boot
+                    %     [eta_i_star, eta_grand_star, ~] = functionalANOVA.GroupBooter(g_data, d_points, k_group, n_iii, n);
+                    %     T_n_Boot(K) = functionalANOVA.SSH_n_boot(eta_i, eta_grand, eta_i_star, eta_grand_star, n_iii);
+                    %     T.progress;
+                    % end
+                    % T.stop; T.delete;
+                    % mean(T_n_Boot(:,cc)>=T_n(cc))
+
+
                     self.updateFamilyTable(method, {self.N_boot});
 
                 case "PAIRWISE"
@@ -168,7 +166,7 @@ for method = self.ANOVA_Methods_Used   % Generate Test Statistic
             critVals = zeros(n_tests, 1);
 
             for cc = 1:n_tests
-                p_value(cc) = 1 - sum(T_n_Boot(:,cc) < T_n(cc) ) ./ double(self.N_boot);
+                p_value(cc) = mean(T_n_Boot(:,cc)>=T_n(cc));
                 critVals(cc) = quantile(T_n_Boot(:,cc), 1-self.alpha);
             end
             pvalue_matrix(:, counter) = p_value;
@@ -242,21 +240,33 @@ for method = self.ANOVA_Methods_Used   % Generate Test Statistic
             switch self.Hypothesis
                 case "FAMILY"
                     self.hypothesis_LABEL =  pair_vec(1);
-                    T = self.setUpTimeBar(method);
-                    d_points = self.n_domain_points;
-                    k_group =  self.k_groups;
-                    n_iii = self.n_i;
-                    g_data = self.data;
-                    n = self.N;
-                    f_n_Denominator_Boot = zeros(self.N_boot, n_tests);
-                    parfor K = 1 : self.N_boot
-                        [eta_i_star, eta_grand_star, gamma_hat_star] = functionalANOVA.GroupBooter(g_data, d_points, k_group, n_iii, n);
-                        f_n_Denominator_Boot(K, 1) = trace(gamma_hat_star) * (n-k_group);
-                        T_n_Boot = functionalANOVA.SSH_n_boot(eta_i, eta_grand, eta_i_star, eta_grand_star, n_iii);
-                        F_n_Boot(K, :) = (T_n_Boot ./ f_n_Denominator_Boot(K, 1)) .* ratio;
-                        T.progress;
+                    f_n_Denominator_Boot = nan(self.N_boot, n_tests);
+                    yy = [];
+
+                    for K = 1:self.k_groups
+                        yy = [yy; self.data{K}'];
                     end
-                    T.stop; T.delete;
+
+                    [~, ~,  F_n_Boot(:, 1)] = FBootstrap(self, yy);
+
+                    % Numerically the same but Faster using the function above
+                    % T = self.setUpTimeBar(method);
+                    % d_points = self.n_domain_points;
+                    % k_group =  self.k_groups;
+                    % n_iii = self.n_i;
+                    % g_data = self.data;
+                    % n = self.N;
+                    % f_n_Denominator_Boot = zeros(self.N_boot, n_tests);
+                    % parfor K = 1 : self.N_boot
+                    %     [eta_i_star, eta_grand_star, gamma_hat_star] = functionalANOVA.GroupBooter(g_data, d_points, k_group, n_iii, n);
+                    %     f_n_Denominator_Boot(K, 1) = trace(gamma_hat_star) * (n-k_group);
+                    %     T_n_Boot = functionalANOVA.SSH_n_boot(eta_i, eta_grand, eta_i_star, eta_grand_star, n_iii);
+                    %     F_n_Boot(K, :) = (T_n_Boot ./ f_n_Denominator_Boot(K, 1)) .* ratio;
+                    %     T.progress;
+                    % end
+                    % T.stop; T.delete;
+                    % mean(F_n_Boot(:,cc)>=F_n(cc))
+
                     self.updateFamilyTable(method, {self.N_boot});
 
                 case "PAIRWISE"

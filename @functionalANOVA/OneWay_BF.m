@@ -45,19 +45,6 @@ function [pvalue, stat] = OneWay_BF(self, method, data, Contrast, c, varargin)
 % Revised  Jan 10,   2013 NUS, Singapore
 % Modified May 26,   2023 Los Alamos National Laboratory, USA
 
-%{
-© 2023. Triad National Security, LLC. All rights reserved.
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-Department of Energy/National Nuclear Security Administration. All rights in the program are.
-reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-Security Administration. The Government is granted for itself and others acting on its behalf a
-nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare.
-derivative works, distribute copies to the public, perform publicly and display publicly, and to permit.
-others to do so.
-
-%}
-
 ip = inputParser;
 
 addRequired(ip, 'method', @(x) isstring(x)) 
@@ -234,7 +221,8 @@ switch method
                 iflag=(aflag==aflag0(i));
                 yi=yy(iflag,:);
                 ni=gsize(i);
-                Bflag=fix(rand(ni,1)*(ni-1))+1;
+                % Bflag=fix(rand(ni,1)*(ni-1))+1;
+                Bflag = randsample(ni, ni, true);
                 Byi=yi(Bflag,:);
                 Bmui=mean(Byi);
                 Bmu=[Bmu;Bmui];
@@ -265,7 +253,8 @@ switch method
                 iflag=(aflag==aflag0(i));
                 yi=yy(iflag,:);
                 ni=gsize(i);
-                Bflag=fix(rand(ni,1)*(ni-1))+1;
+                % Bflag=fix(rand(ni,1)*(ni-1))+1;
+                Bflag = randsample(ni, ni, true);
                 Byi=yi(Bflag,:);
                 Bmui=mean(Byi);
                 Bmu=[Bmu;Bmui];

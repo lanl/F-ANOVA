@@ -10,7 +10,6 @@ function pvalue = two_group_cov(self, method, y1, y2)
 % method ([1x1] String)
 %        - Options:  "L2-Simul", "L2-Naive", "L2-BiasReduced",
 %          "Bootstrap-Test", "Permutation  test"
-%        - "L2-Simul" not supported yet.
 % y1 ([Wxm] Numeric)
 %         - Sample 1 in short Format
 %         - W: Number of functional samples/realizations from sample 1
@@ -32,18 +31,7 @@ function pvalue = two_group_cov(self, method, y1, y2)
 % History
 % Initial   March 13, 2008 National University of Singapore, Singapore (Jin-Ting Zhang)
 % Modified  May 26,   2023 Los Alamos National Laboratory, USA
-
-%{
-© 2023. Triad National Security, LLC. All rights reserved.
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-Department of Energy/National Nuclear Security Administration. All rights in the program are.
-reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-Security Administration. The Government is granted for itself and others acting on its behalf a
-nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare.
-derivative works, distribute copies to the public, perform publicly and display publicly, and to permit.
-others to do so.
-%}
+% Modified July 30,   2024 Los Alamos National Laboratory, USA
 
 n1 = self.n_i(1);
 n2 = self.n_i(2);
@@ -54,6 +42,33 @@ Sigma=((n1-1)*Sigma1+(n2-1)*Sigma2)/(N-2);
 stat=n1*n2/N*trace((Sigma1-Sigma2)^2);
 
 switch method
+    case "L2-Simul"
+        q=1;
+
+        v_1j = y1' - mean(y1, 1)'; %subject-effect matrix for 1st group
+        v_2j = y2' - mean(y2, 1)'; %subject-effect matrix for 2nd group
+
+        n_array = [n1, n2];
+        v_array = {v_1j, v_2j};
+        LHS = 0;
+        for ii = 1:2
+            n_i = n_array(ii);
+            V = v_array{ii};
+            for jj = 1:n_i
+                v_ij = V(:, jj);
+                LHS = LHS + (v_ij * v_ij') * (v_ij * v_ij');
+            end
+
+        end
+
+        LHS = LHS ./ N;
+        omega_hat = LHS - Sigma*Sigma;  %  matrix multiplication
+        eig_gamma_hat = real(eig(omega_hat));
+        
+        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
+        T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat,  self.N_simul);
+        T_NullFitted = fitdist(T_null, "Kernel");
+        pvalue = 1 - T_NullFitted.cdf(stat);
     case "L2-BiasReduced"  % Bias Reduced
         A=trace(Sigma^2)+trace(Sigma)^2;
         B=2*trace(Sigma^4)+2*trace(Sigma^2)^2;

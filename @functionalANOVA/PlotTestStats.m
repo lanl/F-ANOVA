@@ -29,21 +29,6 @@ function PlotTestStats(p_value, alpha, NullDist, testStat, testName, Hypothesis,
 %                   levels used in the pairwise comparison
 %
 % See also FUNCTIONALANOVA, TWOWAYANOVA
-
-%{
-© 2023. Triad National Security, LLC. All rights reserved.
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-Department of Energy/National Nuclear Security Administration. All rights in the program are.
-reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-Security Administration. The Government is granted for itself and others acting on its behalf a
-nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare.
-derivative works, distribute copies to the public, perform publicly and display publicly, and to permit.
-others to do so.
-
-Author: Adam Watts (acwatts@lanl.gov)
-%}
-
 if p_value <= alpha
     line_label = sprintf('%s Statistic P-Value: p=%0.4f <= %0.3f', testName, p_value, alpha);
     verdict_label = 'Verdict: Reject H_0';

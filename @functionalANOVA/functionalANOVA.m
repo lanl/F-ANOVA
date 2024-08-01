@@ -83,21 +83,6 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
     %                    - for TwoWay F-ANOVA, Array labeling the different
     %                      Secondary factor levels
 
-
-    %{
-        © 2023. Triad National Security, LLC. All rights reserved.
-        This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-        National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-        Department of Energy/National Nuclear Security Administration. All rights in the program are.
-        reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-        Security Administration. The Government is granted for itself and others acting on its behalf a
-        nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare.
-        derivative works, distribute copies to the public, perform publicly and display publicly, and to permit.
-        others to do so.
-
-    Author: Adam Watts (acwatts@lanl.gov)
-    %}
-
     % Read Only but Public
     properties(SetAccess=private)
         ANOVA_Methods = [...
@@ -287,7 +272,11 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             self.responseUnitsLabel = p.Results.responseUnitsLabel;
 
             self.k_groups = length(dataArray);
+
+            
             self.boundsArray = boundsArray;
+            assert(numel(self.boundsArray) == 2, 'Requires 2 Bounds')
+            assert(numel(unique(self.boundsArray)) == 2, 'Lower and Upper Bounds Must be Different from each Other')
 
             assert(self.k_groups >=2 , 'Must have at least 2 categories/Groups for F-ANOVA to work')
 
@@ -1035,7 +1024,10 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             self.COVAR_P_Table{Signif_results, "Verdict"} = "Reject Null Hypothesis for Alternative Hypothesis";
             self.COVAR_P_Table{~Signif_results, "Verdict"} = "Fail to Reject Null Hypothesis";
             %             self.COVAR_P_Table{isnan(p_values), "Verdict"} = "";
-            disp(self.COVAR_P_Table)
+
+            if self.verbose
+                disp(self.COVAR_P_Table)
+            end
 
         end
 
@@ -1065,6 +1057,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
                     case "L2-Simul"
                         % Simulating the null distribution
                         %                         p_values(K) = 1 - T_NullFitted.cdf(T_n);
+                         p_values(K) = self.two_group_cov(method, self.data{1}', self.data{2}');
                     case "L2-Naive"
                         p_values(K) = self.two_group_cov(method, self.data{1}', self.data{2}');
                     case "L2-BiasReduced"
@@ -1082,7 +1075,10 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             self.COVAR_P_Table{Signif_results, "Verdict"} = "Reject Null Hypothesis for Alternative Hypothesis";
             self.COVAR_P_Table{~Signif_results, "Verdict"} = "Fail to Reject Null Hypothesis";
             self.COVAR_P_Table{isnan(p_values), "Verdict"} = "";
-            disp(self.COVAR_P_Table)
+
+            if self.verbose
+                disp(self.COVAR_P_Table)
+            end
 
 
         end
@@ -1334,6 +1330,156 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
         % Subsets Data into smaller Domain
         self = function_Subsetter(self)
 
+        % Helper Function for OneWay Homoscedastic F-ANOVA F-type bootstrap
+        function [p_value, stat, btstat]= FBootstrap(self, yy)
+            % F-type test for k-sample problem with a common covariance function.
+            % One-way ANOVA for functional data: Main-effects test
+            % yy=Matrix [y1,y2,...,yp]: nxp data matrix,  each row: discretization of a func.
+            % stat=test statistic, btstat= a bootstrap sample of statistic
+            % Jin-Ting Zhang
+            % March 13, 2008; 
+            % Revised July 11, 2008  NUS, Singapore
+            % Revised July 31, 2024 Los Alamos National Laboratory
+
+            [n,p]=size(yy);
+            % p=p-1;
+
+            gsize = self.n_i';
+            aflag = functionalANOVA.aflagMaker(gsize);
+            % aflag=yy(:,1);
+            aflag0=unique(aflag);
+            k=length(aflag0); %% Level of Factor A
+            % yy=yy(:,2:(p+1)); %% nxp data matrix,  each row: discretization of a func.
+
+            mu0=mean(yy); %% pooled sample mean function
+            gsize=[];
+            vmu=[];
+            z=[];
+            SSR=0;
+
+            for i=1:k
+                iflag=(aflag==aflag0(i));
+                yi=yy(iflag,:); %%Samle i
+                ni=size(yi,1);
+                mui=mean(yi);
+                zi=yi-ones(ni,1)*mui;
+                gsize=[gsize;ni];
+                vmu=[vmu;mui]; %% each row is a group mean vector
+                z=[z;zi];
+                SSR=SSR+ni*(mui-mu0).^2; %% 1xp vector
+            end
+
+            if n>p
+                Sigma=z'*z/(n-k);  %% pxp pooled covar. matrix
+            else
+                Sigma=z*z'/(n-k); %% nxn matrix, having the same eigenvalues with pooled cov. matrix
+            end
+
+            A=trace(Sigma);
+            % B=trace(Sigma^2);
+            stat=sum(SSR)/A/(k-1);
+
+            btstat = zeros(1, self.N_boot);
+            parfor ii=1:self.N_boot
+                btvmu=[];btz=[];
+                for i=1:k
+                    iflag=(aflag==aflag0(i));
+                    yi=yy(iflag,:);
+                    ni=gsize(i);
+                    % btflag=fix(rand(ni,1)*(ni-1))+1;
+                    btflag = randsample(ni, ni, true); 
+                    
+                    btyi=yi(btflag,:);
+                    btmui=mean(btyi);
+                    btzi=btyi-ones(ni,1)*btmui;btz=[btz;btzi];
+                    btmui=btmui-vmu(i,:);
+                    btvmu=[btvmu;btmui];
+                end
+                btmu0=gsize'*btvmu/n;
+                btSSR=0;
+                for i=1:k
+                    btSSR=btSSR+gsize(i)*(btvmu(i,:)-btmu0).^2;
+                end
+
+                if n>p
+                    btSigma=btz'*btz/(n-k);  %% pxp pooled covar. matrix
+                else
+                    btSigma=btz*btz'/(n-k); %% nxn matrix, having the same eigenvalues with pooled cov. matrix
+                end
+                btA=trace(btSigma);
+                btstat(ii)=sum(btSSR)/btA/(k-1);
+
+            end
+            p_value=mean(btstat>=stat);         
+        end
+
+        % Helper Function for OneWay Homoscedastic F-ANOVA L2-norm bootstrap
+        function [p_value, stat, btstat]= L2Bootstrap(self, yy)
+            % L2-norm based  test for k-sample problem with a common covariance function.
+            % One-way ANOVA for functional data: Main-effects test
+            % yy=Matrix [y1,y2,...,yp]: nxp data matrix,  each row: discretization of a func.
+            % stat=test statistic, btstat= a bootstrap sample of statistic
+            % Jin-Ting Zhang
+            % March 13, 2008;
+            % Revised July 11, 2008  NUS, Singapore
+            % Revised Oct 19, 2011 Princeton University
+            % Revised July 31, 2024 Los Alamos National Laboratory
+
+
+            [n,p]=size(yy);
+            % p=p-1;
+
+            gsize = self.n_i';
+            aflag = functionalANOVA.aflagMaker(gsize);
+            % aflag=yy(:,1);
+            aflag0=unique(aflag);
+            k=length(aflag0); %% Level of Factor A
+            % yy=yy(:,2:(p+1)); %% nxp data matrix,  each row: discretization of a func.
+
+            mu0=mean(yy); %% pooled sample mean function
+            gsize=[];
+            vmu=[];
+            z=[];
+            SSR=0;
+
+            for i=1:k
+                iflag=(aflag==aflag0(i));
+                yi=yy(iflag,:); %%Samle i
+                ni=size(yi,1);
+                mui=mean(yi);
+                zi=yi-ones(ni,1)*mui;
+                gsize=[gsize;ni];
+                vmu=[vmu;mui]; %% each row is a group mean vector
+                z=[z;zi];
+                SSR=SSR+ni*(mui-mu0).^2; %% 1xp vector
+            end
+
+            stat=sum(SSR);
+
+            btstat = zeros(1, self.N_boot);
+            parfor ii=1:self.N_boot
+                btvmu=[];
+                for i=1:k
+                    iflag=(aflag==aflag0(i));
+                    yi=yy(iflag,:);
+                    ni=gsize(i);
+                    % btflag=fix(rand(ni,1)*(ni-1))+1;
+                    btflag = randsample(ni, ni, true);
+                    btyi=yi(btflag,:);
+                    btmui=mean(btyi)-vmu(i,:);
+                    btvmu=[btvmu;btmui];
+                end
+                btmu0=gsize'*btvmu/n;
+                btSSR=0;
+                for i=1:k
+                    btSSR=btSSR+gsize(i)*(btvmu(i,:)-btmu0).^2;
+                end
+                btstat(ii)=sum(btSSR);
+            end
+            p_value=mean(btstat>=stat);
+  
+            
+        end
 
         % Helper Function to set up OneWay Homoscedastic F-ANOVA
         function [T_n, F_n, beta_hat, kappa_hat, beta_hat_unbias, kappa_hat_unbias] = SetUpANOVA(self, SSH_t, SSE_t, gamma_hat, q)
@@ -1933,6 +2079,189 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
     end
 
     methods (Static)
+
+        function F_ANOVA_Obj = EchoWrapper(R, ANOVA_Labels, boundsArray, varargin)
+            % EchoWrapper Returns F-ANOVA Object using Echo Labels
+            % EchoWrapper(R, ANOVA_Labels, boundsArray, varargin)
+            %
+            % Echo Wrapper using the label names in the record array to help
+            % group the records for either one-way or two-way ANOVA.
+            % Automatically creates ensembles and correct grouping labels.
+            %
+            % <strong>Required Inputs</strong>
+            %                    R (OneD Record array)
+            %                      - Record array of OneD Echo Records
+            %         ANOVA_Labels ([1xm] String or Cell String Array)
+            %                      - Echo label names for grouping records.
+            %                      - if m=1 then it prepares a OneWay Analysis
+            %                      - if m=2 then it prepares a Two-Way Analysis.
+            %                        The first label name is used to generate the
+            %                        primary factor lavels and the second label
+            %                        name is used to create the secondary factor levels.
+            %                      - Only supports 1 or 2 label names.
+            %          boundsArray ([1x2] Numeric)
+            %                      - Bounds to subset the funtional data response by
+            %                        the values from d_grid.
+            %                      - To utilize all the functional data, it is
+            %                        recommended to use boundsArray=[-inf, inf]
+            %
+            % <strong>Optional Inputs</strong>
+            %               N_boot ([1x1] Numeric, default=10,000)
+            %                      - Number of bootstrap replicate.
+            %                      - Used for any methods that have "Bootstrap" in them.
+            %              N_simul ([1x1] Numeric, default=10,000)
+            %                      - Number of data points to simulate null distribution
+            %                      - Used for any methods that have "Simul" in them.
+            %        ANOVA_Methods ([1x1] string Array or Cell String, default=self.ANOVA_Methods)
+            %                      - ANOVA Methods used to calculate P-values
+            %                alpha ([1x1] Numeric, default=0.05)
+            %                      - Critical value for assigning statistical significance
+            %  FirstLabelSortOrder (1x1 String, default={})
+            %                      - Custom sort order of the label values
+            %                        corresponding to the first label name
+            %                        in ANOVA_Labels
+            % SecondLabelSortOrder (1x1 String, default={})
+            %                      - Custom sort order of the label values
+            %                        corresponding to the second label name
+            %                        in ANOVA_Labels
+            %        LabelSortMode (1x1 String, default='ascend')
+            %                      - SortMode in Echos sortBy() method
+            %                      - Options are 'ascend' or 'descend'.
+            %
+            % See also FUNCTIONALANOVA
+            
+            p = inputParser;
+            classInspect = ?functionalANOVA;
+
+            addRequired(p, 'R', @(x)   ismember('OneD', superclasses(R)))                       % OneD Records to be used in F-Anova
+            addRequired(p, 'ANOVA_Labels', @(x) iscellstr(x) || isstring(x) || ischar(x))
+            addRequired(p, 'boundsArray', @(x) isnumeric(x)) % Domain for which to compute the L2 Statistic Over
+
+            addParameter(p, 'N_boot', classInspect.PropertyList(13, 1).DefaultValue  , @(x) isinteger(int64(x)));
+            addParameter(p, 'N_simul',classInspect.PropertyList(15, 1).DefaultValue  , @(x) isinteger(int64(x)))
+            addParameter(p, 'ANOVA_Methods', classInspect.PropertyList(1).DefaultValue, @(x) iscellstr(x) || isstring(x))
+            addParameter(p, 'alpha', classInspect.PropertyList(16, 1).DefaultValue  , @(x) x<=1 && x>= 0)
+            addParameter(p, 'FirstLabelSortOrder', {})
+            addParameter(p, 'SecondLabelSortOrder', {})
+            addParameter(p, 'LabelSortMode', 'ascend')
+
+
+            parse(p, R, ANOVA_Labels, boundsArray, varargin{:});
+
+            if iscellstr(ANOVA_Labels) || ischar(ANOVA_Labels)
+                ANOVA_Labels = string(ANOVA_Labels);
+            end
+
+            if iscellstr(p.Results.LabelSortMode) || ischar(p.Results.LabelSortMode)
+                LabelSortMode = string(p.Results.LabelSortMode);
+                assert(any(strcmpi(LabelSortMode, ["ascend", "descend"])), 'LabelSortMode must be either ''ascend'' or ''descend''')
+            end
+
+            %Verify label(1) exist for all Records
+            assert(R.isLabelSet(ANOVA_Labels(1)), '"%s" Doesnt exist for all objects in array', ANOVA_Labels(1))
+            % Create Cell for first Label
+            label_one = ANOVA_Labels(1);
+            unique_values_1 = R.uniqueLabelValues(label_one);
+            n_values_1 = numel(unique_values_1);
+
+            if numel(ANOVA_Labels) == 1
+                F_WAY = 1;
+
+                if ~isempty(p.Results.FirstLabelSortOrder)
+                    assert(any(ismember(p.Results.FirstLabelSortOrder, string(unique_values_1))), 'None of the provide label values exist for label Name: %s', label_one)
+                end
+
+                R = R.sortBy(label_one, p.Results.FirstLabelSortOrder, sortMode=LabelSortMode);
+            elseif numel(ANOVA_Labels) == 2
+                F_WAY = 2;
+
+                %Verify label(2) exist for all Records
+                assert(R.isLabelSet(ANOVA_Labels(2)), '"%s" Doesnt exist for all objects in array', ANOVA_Labels(2))
+                label_two = ANOVA_Labels(2);
+
+                % Level 2
+                unique_values_2 = R.uniqueLabelValues(label_two);
+                n_values_2 = numel(unique_values_2);
+
+
+                if ~isempty(p.Results.FirstLabelSortOrder)
+                    assert(any(ismember(p.Results.FirstLabelSortOrder, string(unique_values_1))), 'None of the provide label values exist for label Name: %s', label_one)
+                end
+
+
+                if ~isempty(p.Results.SecondLabelSortOrder)
+                    assert(any(ismember(p.Results.SecondLabelSortOrder, string(unique_values_2))), 'None of the provide label values exist for label Name: %s', label_two)
+                end
+
+                
+                R = R.sortBy(label_one, p.Results.FirstLabelSortOrder, label_two, p.Results.SecondLabelSortOrder, sortMode=LabelSortMode);
+
+                % Re-do after sorting
+                
+                % Level 1
+                unique_values_1 = R.uniqueLabelValues(label_one);
+                n_values_1 = numel(unique_values_1);
+
+
+                % Level 2
+                unique_values_2 = R.uniqueLabelValues(label_two);
+                n_values_2 = numel(unique_values_2);
+
+                N_indicators = cell(1, n_values_1);
+
+            else
+                error('F-ANOVA can only support 1 or 2 Label Names utilized for One-WAY or Two-Way Analysis')
+            end
+
+            if F_WAY == 1
+                G1 = R.groupBy(label_one);
+            else
+                G1 = R.groupBy(label_one);
+
+                G2_levels = cell(1, n_values_1);
+                for K = 1:n_values_1
+                    G2_levels{K} = G1{K}.groupBy(label_two);
+                end
+
+            end
+
+
+
+            try
+                GroupLevel1 = R.evalBy(label_one, @(r) r.toEnsemble);
+            catch ME
+                fprintf('%sError in converting OneD Records to Ensemble Records%s', newline, newline)
+                rethrow(ME)
+            end
+
+            G1_Labels = GroupLevel1.labelTable("-unsorted", "labelNames", label_one).Variables;
+
+
+            if F_WAY == 2
+                for K = 1: n_values_1 % Primary Group
+                    subIndicator = nan(numel(G1{K}), 1);
+                    % GroupLevel1(K) = GroupLevel1(K).sortBy(level_two, {}); % Sort Before Masking
+                    for KK = 1 : n_values_2 % Secondary Group
+                        ReturnedValues = string(G1{K}.arrayEval(@(r) r.labelValue(label_two)));
+                        mask = strcmp(ReturnedValues, string(unique_values_2{KK}));
+                        subIndicator(mask) = KK;
+                        N_indicators{K} = subIndicator;
+                    end
+                end
+            end
+
+
+            if F_WAY == 1
+                F_ANOVA_Obj = functionalANOVA(GroupLevel1, boundsArray, ...
+                    GroupLabels=string(G1_Labels));
+            else
+                F_ANOVA_Obj = functionalANOVA(GroupLevel1, boundsArray, ...
+                    PrimaryLabels=string(G1_Labels), ...
+                    SecondaryLabels=string(unique_values_2), ...
+                    SubgroupIndicator=N_indicators);
+            end
+
+        end
 
         function CovTrace =  fastCovarianceTrace(Y, format)
             % Assumes Number of domain points is greater than number of samples
