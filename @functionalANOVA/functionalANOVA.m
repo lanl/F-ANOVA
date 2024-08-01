@@ -182,6 +182,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
     end
 
     methods
+        
         function self = functionalANOVA(dataArray, boundsArray, varargin)
             %FUNCTIONALANOVA Constructor for the FUNCTIONALANOVA Class
             % SELF = FUNCTIONALANOVA(DATAARRAY, BOUNDSARRAY, VARARGIN)
@@ -1224,86 +1225,6 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
         % Plot Means for OneWay... only
         PlotCovariances(self, varargin)
 
-    end
-
-    methods(Hidden=true)  % In-Progress
-        function VerifyOmegaCalculation(self)
-            assert(self.k_groups == 2, 'Verification on 2 groups')
-
-            %% Set up Data Matrix
-            vmu=[]; V=[];
-            for ii=1:self.k_groups
-                yyi=self.data{ii}';
-                mui=mean(yyi);
-                Vi=yyi-ones(self.n_i(ii),1)*mui;
-                vmu=[vmu;mui];
-                V=[V;Vi];
-            end
-
-            p = self.n_domain_points;
-
-            if self.N>p
-                Sigma=V'*V/(self.N-self.k_groups);  %% [p x p] pooled covariance matrix
-            else
-                Sigma=V*V'/(self.N-self.k_groups);
-            end
-
-            %% Calculate Omega
-            % STILL NOT CALCULATING CORRECTLY
-            % Code for constructing omega, the covariance of the covariance
-            % ii is the ith group
-            % jj is jth observation within the ith group
-            %
-            n = self.N;
-            n_ii = self.n_i;
-            eta_i = zeros(self.n_domain_points, self.k_groups); % estimated means
-            v_hat_i = cell(self.k_groups, 1); %residuals matrix
-            gamma_hat_i = zeros(self.n_domain_points, self.n_domain_points, self.k_groups); % groupwise covariance
-            for kk = 1:self.k_groups
-                eta_i(:, kk) = mean(self.data{kk}, 2); %estimated means
-                zeroMeanData_k_subset = self.data{kk} - eta_i(:, kk); %residuals
-                v_hat_i{kk} = zeroMeanData_k_subset; %residuals
-                gamma_hat_i(:,:,kk) = 1 / (self.n_i(kk) - 1) .* (zeroMeanData_k_subset * zeroMeanData_k_subset'); % groupwise covariance
-            end
-
-            % Compute pooled covariance
-            pooled_covar_terms = zeros(self.n_domain_points, self.n_domain_points, self.k_groups);
-            for kk = 1:self.k_groups
-                pooled_covar_terms(:,:,kk) = (self.n_i(kk) - 1) .* gamma_hat_i(:,:,kk);
-            end
-            pooled_covar = sum(pooled_covar_terms, 3) ./ (n - self.k_groups);
-
-            RHS  = (pooled_covar * pooled_covar); % RHS of minus sign in Eq 10.29  %trace(RHS) == trace(Sigma * Sigma)
-            LHS  = zeros(size(RHS)); % LHS of minus sign in Eq 10.29  % 3-Dimensions, parallize is fastest on the inner loop. Slower than serial on outerloop
-
-            T = TimedProgressBar(n, 35, ...
-                'Calculating Omega for Equality of Covariance in: ', ...
-                'Finished Calculating Omega in: ');
-
-            % Summation portion of Eq 10.29
-            for ii = 1:self.k_groups
-                temp_hat = v_hat_i{ii};
-                temp_LHS = zeros(size(RHS));
-
-                parfor jj = 1:n_ii(ii)
-                    % v_ij = v_hat_i{ii}(:, jj);
-                    v_ij =  temp_hat(:, jj);
-                    temp = (v_ij * v_ij') * (v_ij * v_ij');
-                    temp_LHS = temp_LHS + temp;
-                    T.progress;
-                end
-                LHS = LHS + temp_LHS;
-            end
-
-            %                         LHS = sum(LHS, 3); % Sum over all Groups
-            LHS = LHS ./ (n);  % Coefficient outside summation in Eq 10.29
-
-            self.omega_hat = LHS - RHS;
-            T.stop;T.delete;
-            trace_omega_sum = trace(Sigma*Sigma + Sigma*Sigma);
-            fprintf('%sTrace(Omega) = %0.2f : Ground Truth using Equality from Equation 10.15', newline, trace_omega_sum)
-            fprintf('%sTrace(Omega) = %0.2f : Estimated Using Equation 10.7', newline, trace(self.omega_hat))
-        end
     end
 
     methods (Access = private, Hidden=true)
