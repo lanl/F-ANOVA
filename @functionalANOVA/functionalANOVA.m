@@ -66,6 +66,11 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
     %
     % <strong>Optional Inputs</strong>
     %
+    %             d_grid ([mx1] Numeric, default=[])
+    %                    - Domain grid consisting of an array of the independent
+    %                      variable datums.
+    %                    - Required when passing in a cell array of functional
+    %                      response data. Not Required for Echo Records.
     %  SubgroupIndicator ([Nx1] numeric or [Mx1] Cell Array, default=[])
     %                    - Indicator array denoting the secondary factor levels for
     %                      TwoWay F-ANOVA.
@@ -341,6 +346,11 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             self.function_Subsetter();
             self.n_domain_points = numel(self.lb_index : self.ub_index);
             self.d_grid = self.d_grid(self.lb_index : self.ub_index); % subset Domain
+
+            if self.n_domain_points < 1000
+            warning(['Functional data has a resolution of less than 1000 elements.' ...
+                'It is recommended to have a resolution of at least 1000 elements for the convergence of the F-ANOVA p-values'])
+            end
             %% Trim and plot data
             for k = 1:self.k_groups
                 self.data{k} = dataArray{k}(self.lb_index : self.ub_index, :); %trimming
