@@ -9,7 +9,7 @@ function pvalue = two_group_cov(self, method, y1, y2)
 %
 % method ([1x1] String)
 %        - Options:  "L2-Simul", "L2-Naive", "L2-BiasReduced",
-%          "Bootstrap-Test", "Permutation  test"
+%          "Bootstrap-Test", "Permutation-Test"
 % y1 ([Wxm] Numeric)
 %         - Sample 1 in short Format
 %         - W: Number of functional samples/realizations from sample 1
@@ -54,7 +54,7 @@ switch method
         for ii = 1:2
             n_i = n_array(ii);
             V = v_array{ii};
-            for jj = 1:n_i
+            parfor jj = 1:n_i
                 v_ij = V(:, jj);
                 LHS = LHS + (v_ij * v_ij') * (v_ij * v_ij');
             end
@@ -100,8 +100,11 @@ switch method
         vstat=nan(self.N_boot, 1);
 
         parfor ii=1:self.N_boot
-            flag1=fix(rand(n1,1)*(n1-1))+1;
-            flag2=fix(rand(n2,1)*(n2-1))+1;
+            % flag1=fix(rand(n1,1)*(n1-1))+1;
+            % flag2=fix(rand(n2,1)*(n2-1))+1;
+            flag1=randsample(n1, n1, true);
+            flag2=randsample(n2, n2, true);
+
             yy1=y1(flag1,:);
             yy2=y2(flag2,:);
             S1=cov(yy1);

@@ -9,8 +9,7 @@ function pvalue = k_group_cov(self, method, stat, Sigma, V)
 %
 % method ([1x1] String)
 %        - Options:  "L2-Simul", "L2-Naive", "L2-BiasReduced",
-%          "Bootstrap-Test", "Permutation  test"
-%        - "L2-Simul" not supported yet.
+%          "Bootstrap-Test", "Permutation-Test".
 %   stat ([1x1] Numeric)
 %        - Test statistic to compare against
 %  Sigma ([GxG] Numeric)
@@ -56,17 +55,28 @@ switch method
 
         n_array = self.n_i;
         LHS = 0;
-        tic
+
         for ii = 1:self.k_groups
             n_i = n_array(ii);
             V = v_array{ii};
-            for jj = 1:n_i
+            parfor jj = 1:n_i
                 v_ij = V(:, jj);
                 LHS = LHS + (v_ij * v_ij') * (v_ij * v_ij');
             end
 
         end
-        toc
+       
+        % Not Any Faster than doing double loop above but uses more memory
+
+        % LHS_TEST = 0;
+        % for ii = 1:self.k_groups
+        %     V = v_array{ii};
+        %     V = reshape(V, [size(V, 1), 1, size(V, 2)]);
+        %     V_outer = pagemtimes(V, 'none',  V, 'ctranspose');
+        %     V_outer = pagemtimes(V_outer, 'none', V_outer, 'none');
+        %     LHS_TEST = LHS_TEST + V_outer;
+        % end
+        % LHS_TEST = sum(LHS_TEST, 3);
 
         LHS = LHS ./ N;
 
@@ -131,7 +141,8 @@ switch method
         ts = TimedProgressBar(self.N_boot, 35, 'Running Bootstrap Test: ', 'Finished Bootstrap: ');
         vstat = nan(self.N_boot, 1);
         parfor ii=1:self.N_boot
-            flag=fix(rand(N,1)*(N-1))+1;
+            % flag=fix(rand(N,1)*(N-1))+1;
+            flag = randsample(N, N, true);
             py=V(flag,:);
 
             %%Computing pS : Boot-strap Pooled Covariance
