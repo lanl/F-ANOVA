@@ -55,17 +55,19 @@ switch method
 
         n_array = self.n_i;
         LHS = 0;
-
+        ts = TimedProgressBar(sum(n_array), 35, 'Calculating Simulated Null Distribution: ', '');
         for ii = 1:self.k_groups
             n_i = n_array(ii);
             V = v_array{ii};
-            parfor jj = 1:n_i
+            for jj = 1:n_i
                 v_ij = V(:, jj);
                 LHS = LHS + (v_ij * v_ij') * (v_ij * v_ij');
+                ts.progress()
             end
 
         end
-       
+        ts.stop;ts.delete
+
         % Not Any Faster than doing double loop above but uses more memory
 
         % LHS_TEST = 0;
