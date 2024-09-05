@@ -337,6 +337,11 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
                 self.EchoEnsembleRecs = [];
                 assert(~isempty(self.d_grid), 'Must include parameter called ''d_grid'' when using a cell array of matrices')
                 self.n_i = cellfun(@(x) size(x, 2), dataArray);  % number within each Group
+
+                if iscolumn(self.n_i)
+                    self.n_i = self.n_i';
+                end
+
             end
             self.N = sum(self.n_i); % Total Samples combined
             % Check All groups and Reps have same vector lengths as the domain
