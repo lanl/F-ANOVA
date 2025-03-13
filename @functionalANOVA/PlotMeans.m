@@ -179,16 +179,17 @@ if observationSizeLabel
     else
         TheDataLabels = ": Data " + "(" + string(nLabels) + ")";
     end
+    TheDataLabels = TheDataLabels(:)';
 end
 
 
 if self.genericGroupLabels
-
+    TheLabels = TheLabels(:)';
     MeangroupLabels = TheLabels + ": Group Mean";
     Data_groupLabels = TheLabels + TheDataLabels;
 
 else
-
+    TheLabels = TheLabels(:)';
     MeangroupLabels = TheLabels + ": Mean";
     Data_groupLabels = TheLabels  + TheDataLabels;
 
