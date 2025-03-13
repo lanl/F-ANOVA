@@ -1,36 +1,36 @@
 % Gets lowerbound and upperbound indices to subset dataMatrixCell
 function function_Subsetter(self)
+% Cleaner Implementation
+
 lb = min(self.boundsArray);
 ub = max(self.boundsArray);
 
 
-if lb < min(self.d_grid)
-    lb_index = 1;
-elseif lb > max(self.d_grid)
-    error('Lower Bound is outside the function domain. The Lower Bound exceeds that largest value in the domain')
-else
-    [~, idx] = min(abs(self.d_grid - lb));
-    min_data = self.d_grid(idx);
-    min_data = min_data(min_data >= lb); % Must be within the bounds
-    min_data = min(min_data);
-
-    lb_index = find(min_data==self.d_grid);
+% Check that lb is not greater than the maximum value in self.d_grid
+if lb > max(self.d_grid)
+    error('The lower bound (lb=%g) is greater than the maximum value in self.d_grid (%g).', lb, max(self.d_grid));
 end
 
-if ub > max(self.d_grid)
-    ub_index = numel(self.d_grid);
-elseif ub < min(self.d_grid)
-    error('Upper Bound is Outside the function domain. The upper Bound is smaller than the smallest value in the domain ')
-else
-    [~, idx] = min(abs(self.d_grid - ub));
-    max_data = self.d_grid(idx);
-    max_data = max_data(max_data <= ub); % Must be within the bounds
-    max_index = max(max_data);
-    ub_index = find(max_index==self.d_grid );
-
+% Check that ub is not less than the minimum value in self.d_grid
+if ub < min(self.d_grid)
+    error('The upper bound (ub=%g) is less than the minimum value in self.d_grid (%g).', ub, min(self.d_grid));
 end
 
+% Get the indices corresponding to the values within the bounds
+subset_idx = find(self.d_grid >= lb & self.d_grid <= ub);
 
-self.lb_index = lb_index;
-self.ub_index = ub_index;
+% Create the subset of d_grid
+subset_d_grid = self.d_grid(subset_idx);
+
+% Find the local indices for the smallest and largest values in the subset
+[~, local_min_idx] = min(subset_d_grid);
+[~, local_max_idx] = max(subset_d_grid);
+
+% Map the local indices back to the indices in the original self.d_grid array
+global_min_idx = subset_idx(local_min_idx);
+global_max_idx = subset_idx(local_max_idx);
+
+self.lb_index = global_min_idx;
+self.ub_index = global_max_idx;
+
 end
