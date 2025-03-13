@@ -57,11 +57,17 @@ k=p*q;  % also known as n in the textbook
 %% specifying the sample sizes of each cell
 gsize=[];vmu=[];V=[];
 p_cell = cell(1, p);
+error_string = {};
 for i=1:p
     q_cell = nan(1, q);
     for j=1:q
         ijflag=(aflag==aflag0(i))&(bflag==bflag0(j));
         ni=sum(ijflag);
+
+        if ni == 0
+            error_string{end + 1} = sprintf('A missing combination of data occurs for Primary Label: %s and Secondary Label: %s', self.PrimaryLabels(i), self.SecondaryLabels(j));
+        end
+
         gsize=[gsize;ni];
         yyi=yy(ijflag,:);
         cell_mui=mean(yyi);
@@ -70,6 +76,13 @@ for i=1:p
         q_cell(j) = ni;
     end
     p_cell{i} = q_cell;
+end
+
+if ~isempty(error_string)
+    for K = 1:length(error_string)
+        warning(error_string{K})
+    end
+    error('Missing Combinations Listed Above')
 end
 
 self.n_ii = p_cell;
