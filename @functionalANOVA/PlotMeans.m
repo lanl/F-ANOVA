@@ -10,80 +10,84 @@ function PlotMeans(self, varargin)
 % non-empty SubgroupIndicator property.
 %
 % <strong>Optional Inputs</strong>
-%           plotType (String, default='default')
-%                    - Type of plots to generate
-%                    - Options are: 'default', 'primary', 'secondary', or 'interaction'
-%                    - OneWay F-ANOVA only suppports: 'default'
-%                    - For TwoWay F-ANOVA, 'primary' and 'default' are identical
-%                      and show the mean response and data from the primary
-%                      factor levels
-%                    - For TwoWay F-ANOVA, 'secondary' shows the mean response 
-%                      and data from the secondary factor levels 
-%                    - For TwoWay F-ANOVA, 'interaction' shows the mean response and
-%                      data of all combinations of the primary and secondary
-%                      factor levels
-%  SubgroupIndicator ([Nx1] numeric or [Mx1] Cell Array, default=[])
-%                    - Indicator array denoting the secondary factor levels for
-%                      TwoWay F-ANOVA.
-%                    - N represents the number of observations and must
-%                      match the total number of concatenated observations
-%                    - A represents the number of primary factor levels. Cell
-%                      array of indicator arrays, one for for each primary
-%                      factor level.  
-%        GroupLabels (String or Cell String Array [1xK], default=[])
-%                     - For OneWay F-ANOVA, array labeling the
-%                       different levels within the Main(primary) factor
-%      PrimaryLabels (String or Cell String Array [1xK], default=[])
-%                     - for TwoWay F-ANOVA, Array labeling the different
-%                       Primary factor levels
-%    SecondaryLabels (String or Cell String Array [1xB], default=[])
-%                    - for TwoWay F-ANOVA, Array labeling the different
-%                      Secondary factor levels
-%   domainUnitsLabel ([1x1] string, default='')
-%                    - Independent variable units
-% responseUnitsLabel ([1x1] string, default='')
-%                    - Dependent variable units
-%     xScale/yScale (String, default='')
-%                    - Plot scaling for x or y datum
-%                    - Options are: '', 'linear', or 'log'.
-%                    - Empty defaults to 'linear'
-%   dataTransparency ([1x1] numeric, default=0.1)
-%                    - Line transparency for data
-% legendTransparency ([1x1] numeric, default=1/3)
-%                    - Legend line transparency for data
-%      dataLineWidth ([1x1] numeric, default=1.75)
-%                    - Data line width
-%      meanLineWidth ([1x1] numeric, default=5)
-%                    - Mean line width
-%           fontSize ([1x1] numeric, default=18)
-%                     - Font Size for entire graphic
-%        titleLabels ([1x1] cell, default={})
-%                    - Labels to use for plot title.
-%                    - If class was instantiated with Echo Records, then the
-%                      label values from the records with those label names. 
-%           savePath ([1x1] string, default='')
-%                    - If empty, then figure won't be saved. Else, figure is
-%                      saved in that file path 
-%     legendLocation ([1x1] string, default='best')
-%                    - Legend location using MATLABs syntax.
-%         numColumns ([1x1] numeric, default=1)
-%                    - Number of columns to for Legend
-%        legendTitle ([1x1] string, default='')
-%                    - Custom labels to use for legend title. Will overwrite
-%                      default generated one depending on the type of F-ANOVA used
-%                      and the plotType specified.
-%          newcolors ([Kx3] numeric, default=[])
-%                    - Custom RGB color array to plot levels or groups. 
-%                    - Depending on the plotType, K must match the number of
-%                     primary and/or secondary factor levels.
-%           position ([4x1] numeric, default=[90, 90, 1400, 800])
-%                    - Position and size of graphic.
-%
+%             plotType (String, default='default')
+%                      - Type of plots to generate
+%                      - Options are: 'default', 'primary', 'secondary', or 'interaction'
+%                      - OneWay F-ANOVA only suppports: 'default'
+%                      - For TwoWay F-ANOVA, 'primary' and 'default' are identical
+%                        and show the mean response and data from the primary
+%                        factor levels
+%                      - For TwoWay F-ANOVA, 'secondary' shows the mean response 
+%                        and data from the secondary factor levels 
+%                      - For TwoWay F-ANOVA, 'interaction' shows the mean response and
+%                        data of all combinations of the primary and secondary
+%                        factor levels
+%    subgroupIndicator ([Nx1] numeric or [Mx1] Cell Array, default=[])
+%                      - Indicator array denoting the secondary factor levels for
+%                        TwoWay F-ANOVA.
+%                      - N represents the number of observations and must
+%                        match the total number of concatenated observations
+%                      - A represents the number of primary factor levels. Cell
+%                        array of indicator arrays, one for for each primary
+%                        factor level.  
+% observationSizeLabel ([1x1] logical, default=true)
+%                      - Provides observation count for each level in
+%                        plot legend
+%          GroupLabels (String or Cell String Array [1xK], default=[])
+%                       - For OneWay F-ANOVA, array labeling the
+%                         different levels within the Main(primary) factor
+%        PrimaryLabels (String or Cell String Array [1xK], default=[])
+%                       - for TwoWay F-ANOVA, Array labeling the different
+%                         Primary factor levels
+%      SecondaryLabels (String or Cell String Array [1xB], default=[])
+%                      - for TwoWay F-ANOVA, Array labeling the different
+%                        Secondary factor levels
+%     domainUnitsLabel ([1x1] string, default='')
+%                      - Independent variable units
+%   responseUnitsLabel ([1x1] string, default='')
+%                      - Dependent variable units
+%       xScale/yScale (String, default='')
+%                      - Plot scaling for x or y datum
+%                      - Options are: '', 'linear', or 'log'.
+%                      - Empty defaults to 'linear'
+%     dataTransparency ([1x1] numeric, default=0.1)
+%                      - Line transparency for data
+%   legendTransparency ([1x1] numeric, default=1/3)
+%                      - Legend line transparency for data
+%        dataLineWidth ([1x1] numeric, default=1.75)
+%                      - Data line width
+%        meanLineWidth ([1x1] numeric, default=5)
+%                      - Mean line width
+%             fontSize ([1x1] numeric, default=18)
+%                       - Font Size for entire graphic
+%          titleLabels ([1x1] cell, default={})
+%                      - Labels to use for plot title.
+%                      - If class was instantiated with Echo Records, then the
+%                        label values from the records with those label names. 
+%             savePath ([1x1] string, default='')
+%                      - If empty, then figure won't be saved. Else, figure is
+%                        saved in that file path 
+%       legendLocation ([1x1] string, default='best')
+%                      - Legend location using MATLABs syntax.
+%           numColumns ([1x1] numeric, default=1)
+%                      - Number of columns to for Legend
+%          legendTitle ([1x1] string, default='')
+%                      - Custom labels to use for legend title. Will overwrite
+%                        default generated one depending on the type of F-ANOVA used
+%                        and the plotType specified.
+%            newcolors ([Kx3] numeric, default=[])
+%                      - Custom RGB color array to plot levels or groups. 
+%                      - Depending on the plotType, K must match the number of
+%                       primary and/or secondary factor levels.
+%             position ([4x1] numeric, default=[90, 90, 1400, 800])
+%                      - Position and size of graphic.
+% 
 % See also FUNCTIONALANOVA
 
 p=inputParser;
 addParameter(p, 'plotType', 'default', @(x) any(strcmpi(x, {'default', 'primary', 'secondary', 'interaction'})))
-addParameter(p, 'SubgroupIndicator', self.SubgroupIndicator, @(x) isnumeric(x) || iscell(x)) % Indicator Array Denoting Subgroups
+addParameter(p, 'subgroupIndicator', self.SubgroupIndicator, @(x) isnumeric(x) || iscell(x)) % Indicator Array Denoting Subgroups
+addParameter(p, 'observationSizeLabel', true, @(x) islogical(x))
 addParameter(p, 'GroupLabels', self.GroupLabels, @(x) iscellstr(x) || isstring(x))
 addParameter(p, 'PrimaryLabels', self.PrimaryLabels, @(x) iscellstr(x) || isstring(x))
 addParameter(p, 'SecondaryLabels', self.SecondaryLabels, @(x) iscellstr(x) || isstring(x))
@@ -108,7 +112,7 @@ addParameter(p, 'position', [90, 90, 1400, 800], @(x) isnumeric(x) || numel(x)==
 parse(p, varargin{:})
 self.checkForNewLabels(p)
 
-self.SubgroupIndicator = p.Results.SubgroupIndicator;
+self.SubgroupIndicator = p.Results.subgroupIndicator;
 self.GroupLabels = p.Results.GroupLabels;
 self.PrimaryLabels = p.Results.PrimaryLabels;
 self.SecondaryLabels = p.Results.SecondaryLabels;
@@ -129,7 +133,7 @@ newcolors = p.Results.newcolors;
 position = p.Results.position;
 self.domainUnitsLabel = p.Results.domainUnitsLabel;
 self.responseUnitsLabel = p.Results.responseUnitsLabel;
-
+observationSizeLabel = p.Results.observationSizeLabel;
 
 
 domainLabel = self.domainLabel;
@@ -140,6 +144,8 @@ responseLabel = self.responseLabel;
 if isempty(self.SubgroupIndicator)
     assert(strcmp(plotType, 'DEFAULT'), 'TwoWay plotting options require a SubgroupIndicator argument')
     TheLabels = self.GroupLabels;
+    nLabels = self.n_i';
+
 else
     self.setUpTwoWay()  % Creates Indicator Matrices and Labels
     switch plotType
@@ -147,21 +153,45 @@ else
             plotType = 'PRIMARY';
             TheLabels = self.PrimaryLabels;
 
+            nLabels = self.n_i';
+
         case "SECONDARY"
             TheLabels = self.SecondaryLabels;
+            nLabels = zeros(self.B_groups, 1);
+            for K = 1 :self.A_groups
+                for KK = 1 : self.B_groups
+                    nLabels(KK) = nLabels(KK) + self.n_ii{K}(KK) ;
+                end
+            end
         case "INTERACTION"
             % Prepare Labels
             TheLabels = generateTwoWayComb(self);
+
+            DataLabels_interact = cellfun(@(r) string(r), self.n_ii, 'UniformOutput', false);
+            nLabels = [DataLabels_interact{:}]';
     end
 end
 
-    
+
+if observationSizeLabel
+    if self.genericGroupLabels
+        TheDataLabels = ": Group Data " + "(" + string(nLabels) + ")";
+    else
+        TheDataLabels = ": Data " + "(" + string(nLabels) + ")";
+    end
+end
+
+
 if self.genericGroupLabels
+
     MeangroupLabels = TheLabels + ": Group Mean";
-    Data_groupLabels = TheLabels + ": Group Data ";
+    Data_groupLabels = TheLabels + TheDataLabels;
+
 else
+
     MeangroupLabels = TheLabels + ": Mean";
-    Data_groupLabels = TheLabels  + ": Data";
+    Data_groupLabels = TheLabels  + TheDataLabels;
+
 end
 
 if ~isempty(self.EchoEnsembleRecs)  % If Echo Ensemble Records (get MetaData)
@@ -375,7 +405,12 @@ switch plotType
         DataLabels = strings(ab, 1);
         for K = 1:numel(combinations)
             MeanLabels(K) = combinations(K) + ": Mean";
-            DataLabels(K) = combinations(K)  + ": Data";
+
+            if observationSizeLabel
+                DataLabels(K) = combinations(K)  + ": Data " + "(" + string(nLabels(K)) + ")";
+            else
+                DataLabels(K) = combinations(K)  + ": Data";
+            end
         end
 
 
