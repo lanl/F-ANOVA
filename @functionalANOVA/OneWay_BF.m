@@ -384,9 +384,9 @@ switch method
                 F_NullFitted = fitdist(F_null, "Kernel");
                 pvalue = 1 - F_NullFitted.cdf(f_stat);
 
-                pstat=[stat0, pvalue];
+                pstat=[f_stat, pvalue];
             otherwise
-                pstat=[stat0, nan];
+                pstat=[f_stat, nan];
         end
         % Equation 9.53 how the numerator,S_n, is distributed: One-Way
         % Equation 9.98 how the numerator,S_n, is distributed: Two-Way
