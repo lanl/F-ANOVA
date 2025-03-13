@@ -302,7 +302,11 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
 
                 % Check all domains are equal
                 domainData = horzcat(d_grids{:});
-                assert(~any((diff(domainData,1, 2)), 'all'), 'The domain vectors from the Ensemble records don''t  have identical datumns')
+                diffAbsDomains = abs(diff(domainData,1, 2));
+                max_diffDomains = max(diffAbsDomains, [], "all");
+                eps_anova = 1e-8;
+                assert(max_diffDomains < eps_anova,  sprintf('The domain vectors from the Ensemble records don''t have identical datumns within %g', eps_anova))
+                % assert(~any((diff(domainData,1, 2)), 'all'), 'The domain vectors from the Ensemble records don''t  have identical datumns')
                 self.d_grid = domainData(:, 1);  % Just Pick First domain vector since all are equal
 
                 self.n_i = cellfun(@(x) size(x, 2), dataArray)';  % Transpose,  number within each Group
@@ -353,8 +357,8 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             self.d_grid = self.d_grid(self.lb_index : self.ub_index); % subset Domain
 
             if self.n_domain_points < 1000
-            warning(['Functional data has a resolution of less than 1000 elements.' ...
-                'It is recommended to have a resolution of at least 1000 elements for the convergence of the F-ANOVA p-values'])
+            warning([sprintf('Functional data has a resolution of %i elements.', self.n_domain_points) ...
+                ' It is recommended to have a resolution of at least 1000 elements for the convergence of the F-ANOVA p-values'])
             end
             %% Trim and plot data
             for k = 1:self.k_groups
@@ -371,6 +375,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
                 end
             else
                 self.setUpTwoWay()  % Creates Indicator Matrices and Labels
+                self.n_ii_generator() % Creates Secondary Size Array
             end
 
 
@@ -975,7 +980,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             % Uses domain information for subsetting only
 
             % Compute basic group means and covariances
-
+            self.castCovarianceMethods()
 
             %% Set up Data Matrix
             vmu=[]; V=[];
@@ -1064,7 +1069,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
 
             n_methods = numel(self.COVAR_Methods_Used);
             p_values = nan(n_methods, 1);
-
+            self.castCovarianceMethods()
             %% Start Methods
             for K = 1 : numel(self.COVAR_Methods_Used)
                 method = self.COVAR_Methods_Used(K);
@@ -1101,7 +1106,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
 
         function PointwiseDistributionCheck(self, checkAt, checkType, varargin)
             %POINTWISEDISTRIBUTIONCHECK Examine the distribution of the residuals.
-            % POINTWISEDISTRIBUTIONCHECK(SELF, CHECKAT, CHECKTYPE, …)
+            % POINTWISEDISTRIBUTIONCHECK(SELF, CHECKAT, CHECKTYPE, )
             % Currently only supports checking residuals for OneWay ANOVA.
             %
             % <strong>Required Input</strong>
@@ -1241,6 +1246,73 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
         PlotCovariances(self, varargin)
 
     end
+
+      methods (Access = public, Hidden=true)  % Hidden but Public methods
+        % Creates String for generic data summary for OneWay F-ANOVA, similar to the R library version
+        function DataSummaryReportOneWay(self, ANOVA_TYPE)
+
+            n_groups = numel(self.n_i);
+
+            Mystring = sprintf("\nOne-Way %s F-ANOVA Data Summary:\n\n", ANOVA_TYPE);
+            Mystring = Mystring + sprintf("Confidence Level = %0.3f %s\n", (1-self.alpha) * 100, '%%');
+            Mystring = Mystring  + sprintf("Number of Observations Total = %i\n", sum(self.n_i));
+            Mystring = Mystring + sprintf("Number of Points in Domain = %i\n", sum(self.n_domain_points));
+            Mystring = Mystring + sprintf("Number of Groups = %i\n", n_groups);
+            Mystring = Mystring + sprintf("Domain Range = [%0.3f, %0.3f]\n", self.d_grid(1), self.d_grid(end));
+            Mystring = Mystring + sprintf("Domain Subset = [%0.3f, %0.3f]\n", self.boundsArray(1), self.boundsArray(end));
+            Mystring = Mystring + sprintf("Group Observation Size: [%s]\n", strjoin(string(self.n_i), ', '));
+
+
+            if ~isempty(self.GroupLabels)
+                Mystring = Mystring + sprintf("Group Labels: [%s]\n", strjoin(self.GroupLabels, ', '));
+            end
+
+            Mystring = Mystring + sprintf('%s', newline);
+            fprintf(Mystring)
+
+        end
+
+
+
+        % Creates String for generic data summary for OneWay F-ANOVA, similar to the R library version
+        function DataSummaryReportTwoWay(self, ANOVA_TYPE)
+
+
+            % Set up Nested String for nested observations
+            B_obs_string = [];
+            for k = 1 :self.A_groups
+                B_obs_string = [B_obs_string,  string(sprintf('[%s]', strjoin(string(self.n_ii{k}), ' ')))];
+            end
+            B_obs_string =  strjoin(B_obs_string, ', ');
+
+
+            Mystring = sprintf("\nTwo-Way %s F-ANOVA Data Summary:\n\n", ANOVA_TYPE);
+            Mystring = Mystring + sprintf("Confidence Level = %0.3f %s\n", (1-self.alpha) * 100, '%%');
+            Mystring = Mystring  + sprintf("Number of Observations Total = %i\n", sum(self.n_i));
+            Mystring = Mystring + sprintf("Number of Points in Domain = %i\n", sum(self.n_domain_points));
+            Mystring = Mystring + sprintf("Number of Groups within Primary Factor = %i\n", self.A_groups);
+            Mystring = Mystring + sprintf("Number of Groups within Secondary Factor= %i\n", self.B_groups);
+            Mystring = Mystring + sprintf("Number of Total Groups = %i\n", self.AB_groups);
+            Mystring = Mystring + sprintf("Domain Range = [%0.3f, %0.3f]\n", self.d_grid(1), self.d_grid(end));
+            Mystring = Mystring + sprintf("Domain Subset = [%0.3f, %0.3f]\n", self.boundsArray(1), self.boundsArray(end));
+            Mystring = Mystring + sprintf("Primary Factor Observation Size: [%s]\n", strjoin(string(self.n_i), ', '));
+            Mystring = Mystring + sprintf("Secondary Factor Observation Size: [%s]\n", B_obs_string);
+
+            if ~isempty(self.PrimaryLabels)
+                Mystring = Mystring + sprintf("Primary Factor Labels: [%s]\n", strjoin(self.PrimaryLabels, ', '));
+            end
+
+            if ~isempty(self.SecondaryLabels)
+                Mystring = Mystring + sprintf("Secondary Factor Labels: [%s]\n", strjoin(self.SecondaryLabels, ', '));
+            end
+
+            Mystring = Mystring + sprintf('%s', newline);
+            fprintf(Mystring)
+
+
+        end
+
+      end
 
     methods (Access = private, Hidden=true)
 
@@ -1533,29 +1605,6 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
 
         end
 
-        % Creates String for generic data summary for OneWay F-ANOVA, similar to the R library version
-        function DataSummaryReportOneWay(self, ANOVA_TYPE)
-
-            n_groups = numel(self.n_i);
-
-            Mystring = sprintf("\nOne-Way %s F-ANOVA Data Summary:\n\n", ANOVA_TYPE);
-            Mystring = Mystring + sprintf("Confidence Level = %0.3f %s\n", (1-self.alpha) * 100, '%%');
-            Mystring = Mystring  + sprintf("Number of Observations Total = %i\n", sum(self.n_i));
-            Mystring = Mystring + sprintf("Number of Points in Domain = %i\n", sum(self.n_domain_points));
-            Mystring = Mystring + sprintf("Number of Groups = %i\n", n_groups);
-            Mystring = Mystring + sprintf("Domain Range = [%0.3f, %0.3f]\n", self.d_grid(1), self.d_grid(end));
-            Mystring = Mystring + sprintf("Domain Subset = [%0.3f, %0.3f]\n", self.boundsArray(1), self.boundsArray(end));
-            Mystring = Mystring + sprintf("Group Observation Size: [%s]\n", strjoin(string(self.n_i), ', '));
-
-
-            if ~isempty(self.GroupLabels)
-                Mystring = Mystring + sprintf("Group Labels: [%s]\n", strjoin(self.GroupLabels, ', '));
-            end
-
-            Mystring = Mystring + sprintf('%s', newline);
-            fprintf(Mystring)
-
-        end
 
         % A function for constructing all PAIRWISE contrasts coefficients
         function C = construct_pairwise_contrast_matrix(~, total_groups)
@@ -1591,43 +1640,6 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
 
         end
 
-        % Creates String for generic data summary for OneWay F-ANOVA, similar to the R library version
-        function DataSummaryReportTwoWay(self, ANOVA_TYPE)
-
-
-            % Set up Nested String for nested observations
-            B_obs_string = [];
-            for k = 1 :self.A_groups
-                B_obs_string = [B_obs_string,  string(sprintf('[%s]', strjoin(string(self.n_ii{k}), ' ')))];
-            end
-            B_obs_string =  strjoin(B_obs_string, ', ');
-
-
-            Mystring = sprintf("\nTwo-Way %s F-ANOVA Data Summary:\n\n", ANOVA_TYPE);
-            Mystring = Mystring + sprintf("Confidence Level = %0.3f %s\n", (1-self.alpha) * 100, '%%');
-            Mystring = Mystring  + sprintf("Number of Observations Total = %i\n", sum(self.n_i));
-            Mystring = Mystring + sprintf("Number of Points in Domain = %i\n", sum(self.n_domain_points));
-            Mystring = Mystring + sprintf("Number of Groups within Primary Factor = %i\n", self.A_groups);
-            Mystring = Mystring + sprintf("Number of Groups within Secondary Factor= %i\n", self.B_groups);
-            Mystring = Mystring + sprintf("Number of Total Groups = %i\n", self.AB_groups);
-            Mystring = Mystring + sprintf("Domain Range = [%0.3f, %0.3f]\n", self.d_grid(1), self.d_grid(end));
-            Mystring = Mystring + sprintf("Domain Subset = [%0.3f, %0.3f]\n", self.boundsArray(1), self.boundsArray(end));
-            Mystring = Mystring + sprintf("Primary Factor Observation Size: [%s]\n", strjoin(string(self.n_i), ', '));
-            Mystring = Mystring + sprintf("Secondary Factor Observation Size: [%s]\n", B_obs_string);
-
-            if ~isempty(self.PrimaryLabels)
-                Mystring = Mystring + sprintf("Primary Factor Labels: [%s]\n", strjoin(self.PrimaryLabels, ', '));
-            end
-
-            if ~isempty(self.SecondaryLabels)
-                Mystring = Mystring + sprintf("Secondary Factor Labels: [%s]\n", strjoin(self.SecondaryLabels, ', '));
-            end
-
-            Mystring = Mystring + sprintf('%s', newline);
-            fprintf(Mystring)
-
-
-        end
 
         % Turns Numbers into Characters as default secondary labels factors
         function letters = numbersToLetters(~, numbers)
@@ -1701,9 +1713,30 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
         % Casts ANOVA methods into specific string format
         function castANOVAMethods(self)
             mask =  contains(self.ANOVA_Methods, self.ANOVA_Methods_Used, "IgnoreCase", true);
+            ANOVA_Methods_ORIGNAL = self.ANOVA_Methods_Used;
             self.ANOVA_Methods_Used = self.ANOVA_Methods(mask);
 
+            diffAB = setdiff(ANOVA_Methods_ORIGNAL, self.ANOVA_Methods_Used, 'stable');
+
+            if ~isempty(diffAB)
+                warning("These Unknown Methods Were Excluded: %s", strjoin(diffAB, ' & '))
+            end
+
             assert(sum(mask) >=1, 'No ANOVA Methods were selected!%sMust be at least one of the following: %s.', newline, strjoin(self.ANOVA_Methods, ', '))
+        end
+       % Casts COVARIANCE methods into specific string format
+        function castCovarianceMethods(self)
+            mask =  contains(self.COVAR_Methods, self.COVAR_Methods_Used, "IgnoreCase", true);
+            COVAR_Methods_ORIGNAL = self.COVAR_Methods_Used;
+            self.COVAR_Methods_Used = self.COVAR_Methods(mask);
+
+            diffAB = setdiff(COVAR_Methods_ORIGNAL, self.COVAR_Methods_Used, 'stable');
+
+            if ~isempty(diffAB)
+                warning("These Unknown Methods Were Excluded: %s", strjoin(diffAB, ' & '))
+            end
+
+            assert(sum(mask) >=1, 'No ANOVA Methods were selected!%sMust be at least one of the following: %s.', newline, strjoin(self.COVAR_Methods, ', '))
         end
 
         % Verifies Indicator Array to be used in TwoWay Analysis
@@ -1711,7 +1744,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             % Verify
             if isa(self.SubgroupIndicator, 'cell')
                 assert(numel(self.SubgroupIndicator) == self.k_groups, 'Cell array must match the number of Primary Factors')
-                self.SubgroupIndicator = cell2mat(self.SubgroupIndicator); % Cast to one numeric Array
+                self.SubgroupIndicator = cell2mat(self.SubgroupIndicator'); % Cast to one numeric Array
                 self.SubgroupIndicator = reshape(self.SubgroupIndicator, self.N, 1); % Reshape
             end
 
@@ -1868,6 +1901,46 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
                    self.genericGroupLabels = false;
                end
             end
+        end
+
+        % Creates n_ii for two-way for plotting before running analysis
+        function n_ii_generator(self)
+            aflag  = functionalANOVA.aflagMaker(self.n_i');
+            bflag  = self.SubgroupIndicator;
+            aflag0 = unique(aflag); %% Levels of Factor A (Primary Factor)
+            p = length(aflag0); %% Number of Factor A's levels
+
+
+            bflag0=unique(self.SubgroupIndicator); %% levels of Factor B (Secondary Factor)
+            q=length(bflag0); %% Number of Factor B's level
+
+            %% specifying the sample sizes of each cell
+
+            p_cell = cell(1, p);
+            error_string = {};
+            for i=1:p
+                q_cell = nan(1, q);
+                for j=1:q
+                    ijflag=(aflag==aflag0(i))&(bflag==bflag0(j));
+                    ni=sum(ijflag);
+
+                    if ni == 0
+                        error_string{end + 1} = sprintf('A missing combination of data occurs for Primary Label: %s and Secondary Label: %s', self.PrimaryLabels(i), self.SecondaryLabels(j));
+                    end
+
+                    q_cell(j) = ni;
+                end
+                p_cell{i} = q_cell;
+            end
+
+            if ~isempty(error_string)
+                for K = 1:length(error_string)
+                    warning(error_string{K})
+                end
+                error('Missing Combinations Listed Above')
+            end
+
+            self.n_ii = p_cell;
         end
 
     end
