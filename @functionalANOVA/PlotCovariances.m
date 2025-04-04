@@ -234,6 +234,8 @@ for ii = 1:K
     end
 
     image(self.d_grid, self.d_grid, gamma_hat_i(:,:,ii), "CDataMapping","scaled")
+    AX = gca;
+    AX.YDir = 'normal'; % Corrrects Axis Direction
     clim(subh,[cmin,cmax])
     title(display_label(ii) + " | n = " + n_ii(ii))%, "interpreter", 'latex', 'fontSize', 28)
     C = colorbar;
@@ -275,6 +277,8 @@ cmax = max(pooled_covar, [], 'all');
 
 subh = subplot(1, K + 1, K + 1);
 image(self.d_grid, self.d_grid, pooled_covar, "CDataMapping","scaled")
+AX = gca;
+AX.YDir = 'normal';  % Corrrects Axis Direction
 clim(subh,[cmin,cmax])
 title("Pooled" + " | n = " + self.N)
 xlabel(tempLabel)
