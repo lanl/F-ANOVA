@@ -967,11 +967,14 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             addParameter(p, 'N_permutations', self.N_permutations,  @(x) isinteger(int64(x)))
             addParameter(p, 'N_boot', self.N_boot, @(x) isinteger(int64(x)));
             addParameter(p, 'COVAR_Methods', self.COVAR_Methods)
+            addParameter(p, 'Hypothesis', self.Hypothesis, @(x)  (iscellstr(x) || isstring(x) || ischar(x)) && any(strcmpi(x, self.H0_OneWay)))  % Hypothesis of interest
+
 
             parse(p, varargin{:});
             self.N_permutations = p.Results.N_permutations;
             self.N_boot = p.Results.N_boot;
             self.COVAR_Methods_Used = p.Results.COVAR_Methods;
+            self.Hypothesis = upper(p.Results.Hypothesis);  % Cast to Uppe
 
             % The goal of the equal covariance test is to determine if all
             % groups have equal covariance. Always a family-wise test.
@@ -981,70 +984,114 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
 
             % Compute basic group means and covariances
             self.castCovarianceMethods()
-
-            %% Set up Data Matrix
-            vmu=[]; V=[];
-            for ii=1:self.k_groups
-                yyi=self.data{ii}';
-                mui=mean(yyi);
-                Vi=yyi-ones(self.n_i(ii),1)*mui;
-                vmu=[vmu;mui];
-                V=[V;Vi];
+        
+            switch self.Hypothesis
+                case "PAIRWISE"
+                    C = self.construct_pairwise_contrast_matrix(self.k_groups);
+                    n_tests = size(C,1); %k choose 2
+                    assert(numel(self.GroupLabels) == self.k_groups, "Each Group Must Have Exactly One Label Associated to it")
+        
+                case "FAMILY"
+                    n_tests = 1;
+                    C = [eye(self.k_groups-1),-ones(self.k_groups-1,1)];
+                    pair_vec(1) = "FAMILY";
             end
 
-            m = self.n_domain_points;
 
-            if self.N > m
-                Sigma=V'*V/(self.N-self.k_groups);  %% [m x m] pooled covariance matrix
-            else
-                Sigma=V*V'/(self.N-self.k_groups);  %% [N x N] pooled covariance matrix
-            end
-
-            %% Computing the test statistic
-            stat=0;  % T_n test statistic
-            nni=0;
-            for ii=1:self.k_groups
-                ni=self.n_i(ii);
-                flag=(nni+1):(nni+ni);
-                Vi=V(flag,:);
-                if self.N>m
-                    Si=Vi'*Vi/(ni-1);  %% Vi: nixp
-                    temp=trace((Si-Sigma)^2);
-                else
-                    Si=Vi*Vi'/(ni-1);
-                    temp=trace(Si^2)-2*trace(Vi*V'*V*Vi')/(self.N-self.k_groups)/(ni-1)+trace(Sigma^2);
-                end
-
-                stat=stat+(ni-1)*temp;
-                nni=nni+ni;
-            end
-
+                        %% Methods
             n_methods = numel(self.COVAR_Methods_Used);
-            p_values = nan(n_methods, 1);
 
-
-            %% Start Methods
-            for K = 1 : numel(self.COVAR_Methods_Used)
-                method = self.COVAR_Methods_Used(K);
-                p_values(K) = self.k_group_cov(method, stat, Sigma, V);
+            switch self.Hypothesis
+                case 'FAMILY'
+                    self.COVAR_P_Table = table(self.COVAR_Methods_Used',  nan(n_methods, 1), 'VariableNames', {'Method', 'P-Value'});
+                    n_groups = self.k_groups;
+                case 'PAIRWISE'
+                    for cc = 1:n_tests
+                        %The following acquires label pairs
+                        [t1, t2] = self.GroupLabels{logical(C(cc,:))};
+                        pair_vec(cc) = convertCharsToStrings([t1 ' & ' t2]);
+                    end
+                    n_groups = 2;
+                    T_hypothesis = table(pair_vec', 'VariableNames', {'Hypothesis'});
+                    p_value_matrix = nan(n_tests, n_methods);
+                    test_stat = nan(1, n_methods);
             end
 
-            NotNan_mask = ~isnan(p_values);
-            NotNan_mask = all(NotNan_mask, 2);
 
-            if sum(NotNan_mask) ~= length(self.COVAR_Methods_Used)
-                if self.verbose
-                    warning('Removing equality of covariance results for methods that arent implemented yet.')
-                end
+            switch self.Hypothesis
+                case 'FAMILY'
+                    %% Set up Data Matrix
+                    vmu=[]; V=[];
+                    for ii=1:self.k_groups
+                        yyi=self.data{ii}';
+                        mui=mean(yyi);
+                        Vi=yyi-ones(self.n_i(ii),1)*mui;
+                        vmu=[vmu;mui];
+                        V=[V;Vi];
+                    end
+
+                    m = self.n_domain_points;
+
+                    if self.N > m
+                        Sigma=V'*V/(self.N-self.k_groups);  %% [m x m] pooled covariance matrix
+                    else
+                        Sigma=V*V'/(self.N-self.k_groups);  %% [N x N] pooled covariance matrix
+                    end
+
+                    %% Computing the test statistic
+                    stat=0;  % T_n test statistic
+                    nni=0;
+                    for ii=1:self.k_groups
+                        ni=self.n_i(ii);
+                        flag=(nni+1):(nni+ni);
+                        Vi=V(flag,:);
+                        if self.N>m
+                            Si=Vi'*Vi/(ni-1);  %% Vi: nixp
+                            temp=trace((Si-Sigma)^2);
+                        else
+                            Si=Vi*Vi'/(ni-1);
+                            temp=trace(Si^2)-2*trace(Vi*V'*V*Vi')/(self.N-self.k_groups)/(ni-1)+trace(Sigma^2);
+                        end
+
+                        stat=stat+(ni-1)*temp;
+                        nni=nni+ni;
+                    end
+
+                    n_methods = numel(self.COVAR_Methods_Used);
+                    p_values = nan(n_methods, 1);
+
+
+                    %% Start Methods
+                    for K = 1 : numel(self.COVAR_Methods_Used)
+                        method = self.COVAR_Methods_Used(K);
+                        p_values(K) = self.k_group_cov(method, stat, Sigma, V);
+                    end
+
+                case 'PAIRWISE'
+                    for KK = 1: n_tests  % Each Contrast Test
+                        data_subset = self.data(find(abs(C(KK, :))));  % Turn contrast matrix to mask then find indices of the groups 
+                        %% Start Methods
+                        for K = 1 : numel(self.COVAR_Methods_Used)
+                            method = self.COVAR_Methods_Used(K);
+                            p_value_matrix(KK, K) = self.k_group_cov_pairwise(method, data_subset{1}', data_subset{2}');
+                        end
+
+
+                    end
             end
 
-            self.COVAR_P_Table = table(self.COVAR_Methods_Used', p_values, 'VariableNames', {'Method', 'P-Value'});
-            self.COVAR_P_Table = self.COVAR_P_Table(NotNan_mask, :);
-            Signif_results = self.COVAR_P_Table.("P-Value") < self.alpha;
-            self.COVAR_P_Table{:, "Verdict"} = strings(height(self.COVAR_P_Table), 1); % Place Holders
-            self.COVAR_P_Table{Signif_results, "Verdict"} = "Reject Null Hypothesis for Alternative Hypothesis";
-            self.COVAR_P_Table{~Signif_results, "Verdict"} = "Fail to Reject Null Hypothesis";
-            %             self.COVAR_P_Table{isnan(p_values), "Verdict"} = "";
+
+            switch self.Hypothesis
+                case "PAIRWISE"
+                    T_p_value = array2table(p_value_matrix, 'VariableNames', cellstr(self.COVAR_Methods_Used));
+                    self.COVAR_P_Table = [T_hypothesis, T_p_value];
+                case "FAMILY"
+                    self.COVAR_P_Table.("P-Value") = p_values;
+                    % self.COVAR_P_Table.('Test-Statistic') = test_stat(:, :)';
+                    Signif_results = self.COVAR_P_Table.("P-Value") < self.alpha;
+                    self.COVAR_P_Table{Signif_results, "Verdict"} = "Reject Null Hypothesis for Alternative Hypothesis";
+                    self.COVAR_P_Table{~Signif_results, "Verdict"} = "Fail to Reject Null Hypothesis";
+            end
 
             if self.verbose
                 disp(self.COVAR_P_Table)
@@ -1064,7 +1111,7 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
             parse(p, varargin{:});
             self.N_permutations = p.Results.N_permutations;
             self.N_boot = p.Results.N_boot;
-            self.COVAR_Methods_Used = p.Results.COVAR_Methods;
+            self.COVAR_Methods_Used = string(p.Results.COVAR_Methods);
 
 
             n_methods = numel(self.COVAR_Methods_Used);
@@ -1319,8 +1366,11 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
         % Runs K-group Covariance Tests
         pvalue = k_group_cov(self, method, stat, Sigma, V)
 
-        % Runs 2-group Covariance Tests (slightly different test statistics
-        % than the generalized K-group)
+        % Runs K-group Covariance Tests (Pairwise)
+        pvalue = k_group_cov_pairwise(self, method, y1, y2)
+
+        % Runs 2-group Covariance Tests (slightly different bootstrap and
+        % permutation tests than the generalized K-group)
         pvalue = two_group_cov(self, method, y1, y2)
 
         % Runs OneWay homogeneous tests
@@ -1485,8 +1535,6 @@ classdef functionalANOVA < handle & matlab.mixin.Copyable
                 btstat(ii)=sum(btSSR);
             end
             p_value=mean(btstat>=stat);
-  
-            
         end
 
         % Helper Function to set up OneWay Homoscedastic F-ANOVA
