@@ -34,7 +34,7 @@ function pvalue = k_group_cov(self, method, stat, Sigma, V)
 % Revised   April 30, 2012, Princeton University
 % Modified  May 26,   2023, Los Alamos National Laboratory, USA
 % Modified  July 31,  2024, Los Alamos National Laboratory, USA
-
+% Modified  Apr 08,   2025, Los Alamos National Laboratory, USA
 %% L2-norm based test
 
 gsize = self.n_i;
@@ -106,36 +106,74 @@ switch method
         pvalue = 1 - T_NullFitted.cdf(stat);
 
     case "L2-Naive"
-        A=trace(Sigma);
-        B=trace(Sigma^2);
+        % Original Implementation
+        % A=trace(Sigma);
+        % B=trace(Sigma^2);
+        % 
+        % A2=A^2;
+        % B2=B;
+        % 
+        % A3=B2+A2;
+        % B3=2*trace(Sigma^4)+2*B2^2;
+        % 
+        % df=(k-1)*A3^2/B3;
+        % alpha=B3/A3;
+        % 
+        % pvalue=1-chi2cdf(stat/alpha,df);
 
-        A2=A^2;
-        B2=B;
+       % traces of Σ^2, Σ^3, and Σ^4 
+       % are adjusted using factors like (N−2)(N−2) and (N−3)(N−3)
+       % to correct for bias in finite samples. Same as two_group_cov
+       % Compute the raw moments
+       an = trace(Sigma);
+       bn = trace(Sigma^2);
+       cn = trace(Sigma^3);
+       dn = trace(Sigma^4);
 
-        A3=B2+A2;
-        B3=2*trace(Sigma^4)+2*B2^2;
+       % Compute the finite-sample corrected moments
+       Bn = (N-2)^2/(N*(N-3)) * (bn - an^2/(N-2));
+       Cn = (cn - (3/(N-2))*Bn*an) / (1 + 3/(N-2));
+       Dn = (dn - (6/(N-2))*Cn*an) / (1 + 6/(N-2));
 
-        df=(k-1)*A3^2/B3;
-        alpha=B3/A3;
+       % Composite moments (as in Implementation 1)
+       A_corr = Bn + an^2;
+       B_corr = 2*Dn + 2*Bn^2;
 
-        pvalue=1-chi2cdf(stat/alpha,df);
-%         params=[alpha,df,A,B,A2,B2,A3,B3];
+       % For k=2, this exactly matches Implementation 1.
+       % For k > 2, we generalize by multiplying the degrees of freedom by (k-1)
+       alpha = B_corr / A_corr;
+       df = (k-1) * (A_corr^2) / B_corr;
+
+       pvalue = 1 - chi2cdf(stat/alpha, df);
+
     case "L2-BiasReduced"
-        A=trace(Sigma);
-        B=trace(Sigma^2);
+        % Original Implementation
+        % A=trace(Sigma);
+        % B=trace(Sigma^2);
+        % 
+        % A2=(N-k)*(N-k+1)/(N-k-1)/(N-k+2)*(A^2-2*B/(N-k+1));
+        % B2=(N-k)^2/(N-k-1)/(N-k+2)*(B-A^2/(N-k));
+        % 
+        % %A=trace(Sigma^2)+trace(Sigma)^2;
+        % %B=2*trace(Sigma^4)+2*trace(Sigma^2)^2;
+        % A3=B2+A2;
+        % B3=2*trace(Sigma^4)+2*B2^2;
+        % 
+        % df=(k-1)*A3^2/B3;alpha=B3/A3;
+        % 
+        % pvalue=1-chi2cdf(stat/alpha,df);
 
-        A2=(N-k)*(N-k+1)/(N-k-1)/(N-k+2)*(A^2-2*B/(N-k+1));
-        B2=(N-k)^2/(N-k-1)/(N-k+2)*(B-A^2/(N-k));
+        % Modified so it matches the higher moments like the two-group cov
+        % Compute raw moments
+        A0 = trace(Sigma^2) + trace(Sigma)^2;
+        B0 = 2*trace(Sigma^4) + 2*(trace(Sigma^2))^2;
+        
+        alpha = ((N-k)^2/(N*(N-k-1)) * (B0 - A0^2/(N-k)))/A0;
+        df = (1+1/(N-k)) * (A0^2 - 2*B0/(N-k+1)) / (B0 - A0^2/(N-k));
+        df = (k-1) * df;
+        
+        pvalue = 1 - chi2cdf(stat/alpha, df);
 
-        %A=trace(Sigma^2)+trace(Sigma)^2;
-        %B=2*trace(Sigma^4)+2*trace(Sigma^2)^2;
-        A3=B2+A2;
-        B3=2*trace(Sigma^4)+2*B2^2;
-
-        df=(k-1)*A3^2/B3;alpha=B3/A3;
-
-        pvalue=1-chi2cdf(stat/alpha,df);
-%         params=[alpha,df,A,B,A2,B2,A3,B3];
         % Bootstrap  test
     case "Bootstrap-Test"
         aflag  = aflagMaker(gsize);
