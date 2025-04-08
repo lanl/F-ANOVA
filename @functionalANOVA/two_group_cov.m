@@ -32,14 +32,41 @@ function pvalue = two_group_cov(self, method, y1, y2)
 % Initial   March 13, 2008 National University of Singapore, Singapore (Jin-Ting Zhang)
 % Modified  May 26,   2023 Los Alamos National Laboratory, USA
 % Modified July 30,   2024 Los Alamos National Laboratory, USA
+% Modified April 08,  2025 Los Alamos National Laboratory, USA
 
-n1 = self.n_i(1);
-n2 = self.n_i(2);
+
+n1 = size(y1,1);
+n2 = size(y2,1);
+L = size(y1,2);
+
 Sigma1=cov(y1);
 Sigma2=cov(y2);
 N=n1+n2;
-Sigma=((n1-1)*Sigma1+(n2-1)*Sigma2)/(N-2);
-stat=n1*n2/N*trace((Sigma1-Sigma2)^2);
+Sigma=((n1-1)*Sigma1+(n2-1)*Sigma2)/(N-2); 
+stat=(n1-1)*(n2-1) / (N-2) * trace((Sigma1-Sigma2)^2);  % Corrected
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %% Computing the test statistic (same statistic as the one above)
+% stat=0;  % T_n test statistic
+% nni=0;
+% for ii=1:2
+%     ni=n_i(ii);
+%     flag=(nni+1):(nni+ni);
+%     Vi=V(flag,:);
+%     if N > m
+%         Si=Vi'*Vi/(ni-1);  %% Vi: nixp
+%         temp=trace((Si-Sigma)^2);
+%     else
+%         Si=Vi*Vi'/(ni-1);
+%         temp=trace(Si^2)-2*trace(Vi*V'*V*Vi')/(N-2)/(ni-1)+trace(Sigma^2);
+%     end
+% 
+%     stat=stat+(ni-1)*temp;
+%     nni=nni+ni;
+% end
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 switch method
     case "L2-Simul"
@@ -66,7 +93,13 @@ switch method
         ts.stop;ts.delete
         
         LHS = LHS ./ N;
-        omega_hat = LHS - Sigma*Sigma;  %  matrix multiplication
+
+        if size(LHS) == size(Sigma)
+            omega_hat = LHS - Sigma*Sigma;  %  matrix multiplication
+        else
+            SigmaLarge=((n1-1)*cov(y1)+(n2-1)*cov(y2))/(N-2);
+            omega_hat = LHS - SigmaLarge*SigmaLarge;  %  matrix multiplicatio
+        end
         eig_gamma_hat = real(eig(omega_hat));
         
         eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
@@ -99,27 +132,29 @@ switch method
 
     case "Bootstrap-Test" %% Bootstrap test
         ts = TimedProgressBar(self.N_boot, 35, 'Running Bootstrap Test: ', '');
-        y1=y1-ones(n1,1)*mean(y1);
-        y2=y2-ones(n2,1)*mean(y2);
         vstat=nan(self.N_boot, 1);
 
         parfor ii=1:self.N_boot
             % flag1=fix(rand(n1,1)*(n1-1))+1;
             % flag2=fix(rand(n2,1)*(n2-1))+1;
+
+            % Original Implementation (Slow (feature space) but easy to read)
             flag1=randsample(n1, n1, true);
             flag2=randsample(n2, n2, true);
 
             yy1=y1(flag1,:);
             yy2=y2(flag2,:);
+
             S1=cov(yy1);
             S2=cov(yy2);
-            stat0=n1*n2/N*trace( ( (S1-S2)-(Sigma1-Sigma2) )^2 );
+
+            stat0=(n1-1)*(n2-1) / (N-2)*trace( ( (S1-S2)-(Sigma1-Sigma2) )^2 ); % Fixed
             vstat(ii)=stat0;
+
             ts.progress()
         end
         ts.stop;ts.delete
         pvalue=mean(vstat>stat);
-%         pstat=[stat,pvalue];
 
     case "Permutation-Test" %% Permutation  test
         ts = TimedProgressBar(self.N_permutations, 35, 'Running Permutation Test: ', '');
@@ -135,7 +170,7 @@ switch method
             yy2=yy(flag((n1+1):N),:);
             S1=cov(yy1);
             S2=cov(yy2);
-            stat0=n1*n2/N*trace((S1-S2)^2);
+            stat0=(n1-1)*(n2-1) / (N-2)*trace((S1-S2)^2); % Fixed
             vstat(ii)=stat0;
             ts.progress()
         end
