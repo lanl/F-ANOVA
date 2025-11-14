@@ -28,7 +28,7 @@ Name: Adam C. Watts
 Email: acwatts@lanl.gov
 
 ## Authors and acknowledgment
-Thanks to Jin-Ting Zhang as some of his has been modified within this framework.
+Thanks to Jin-Ting Zhang as some of his code has been modified within this framework.
 
 Thanks to Samuel Myren for his contribution on the OneWay ANOVA portions.
 
