@@ -289,47 +289,49 @@ switch method
 
         pstat=[f_stat, pvalue];
 
-    case "L2-Simul"  % Works for OneWay_BF but not TwoWay_BF
+    case "L2-Simul"  % Works for OneWay_BF and now TwoWay_BF
+        build_Covar_star = zeros(self.n_domain_points, 0);
+        mask = any(logical(Contrast'), 2);
+        COV_Sum = 0;
+        for i=1:k
+            if mask(i)
+                iflag=(aflag==aflag0(i));
+                yi=yy(iflag,:);
+                gsize(i,:)=size(yi,1);
+                ni=gsize(i);
+                mui=mean(yi);
+                vmu=[vmu;mui];
+                ri=yi-ones(ni,1)*mui;
+                COV_Sum = COV_Sum +  ( cov(ri) * (ni-1) );
+                build_Covar_star = [build_Covar_star; ri];
+            end
+
+        end
+        g_n = gsize(mask);               % subset of cell size
+        N_n = sum(g_n);                  % Total from pair cell-size
+        k_n = numel(g_n);                % Dimension space
+
+        COV_Sum = COV_Sum ./ ((N_n-k_n));    % Pooled Covariance
+
+        eig_gamma_hat = eig(COV_Sum);
+        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
+
 
         switch self.Hypothesis
             case {'FAMILY', 'PAIRWISE'}
-                build_Covar_star = zeros(self.n_domain_points, 0);
-
-                mask = any(logical(Contrast'), 2);
-                COV_Sum = 0;
-                for i=1:k
-                    if mask(i)
-                        iflag=(aflag==aflag0(i));
-                        yi=yy(iflag,:);
-                        gsize(i,:)=size(yi,1);
-                        ni=gsize(i);
-                        mui=mean(yi);
-                        vmu=[vmu;mui];
-                        ri=yi-ones(ni,1)*mui;
-                        COV_Sum = COV_Sum +  ( cov(ri) * (ni-1) );
-                        build_Covar_star = [build_Covar_star; ri];
-                    end
-
-                end
-                g_n = gsize(mask);               % subset of cell size
-                N_n = sum(g_n);                  % Total from pair cell-size
-                k_n = numel(g_n);                % Dimension space
-
-                COV_Sum = COV_Sum ./ ((N_n-k_n));    % Pooled Covariance
-
-                eig_gamma_hat = eig(COV_Sum);
-                eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
-
                 q = k_n-1;
-                T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat, self.N_simul);
-
-                T_NullFitted = fitdist(T_null, "Kernel");
-                pvalue = 1 - T_NullFitted.cdf(stat0);
-
-                pstat=[stat0, pvalue];
-            otherwise % Doesnt work for TwoWay_BF
-                pstat=[stat0, nan];
+            case {'PRIMARY','SECONDARY','INTERACTION'}
+                % key change: df equals the number of independent linear restrictions
+                q = rank(Contrast);  % fix
         end
+        
+        T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat, self.N_simul);
+
+        T_NullFitted = fitdist(T_null, "Kernel");
+        pvalue = 1 - T_NullFitted.cdf(stat0);
+
+        pstat=[stat0, pvalue];
+
 
     case "F-Simul"
         Dh=sqrt(D);
@@ -340,54 +342,57 @@ switch method
         f_stat=stat0/K1;
 
 
-        switch self.Hypothesis
-            case {'FAMILY', 'PAIRWISE'}  % Can be extended to TwoWay_BF but is dependent on "L2-Simul" working first.
-                build_Covar_star = zeros(self.n_domain_points, 0);
-                COV_Sum = 0;
-                for i=1:k
-                    if mask(i)
-                        iflag=(aflag==aflag0(i));
-                        yi=yy(iflag,:);
-                        gsize(i,:)=size(yi,1);
-                        ni=gsize(i);
-                        mui=mean(yi);
-                        vmu=[vmu;mui];
-                        ri=yi-ones(ni,1)*mui;
-                        COV_Sum = COV_Sum +  ( cov(ri) * (ni-1) );
-                        build_Covar_star = [build_Covar_star; ri];
-                    end
-                end
-                g_n = gsize(mask);               % subset of cell size
-                N_n = sum(g_n);                  % Total from pair cell-size
-                k_n = numel(g_n);                % Dimension space
-
-                COV_Sum = COV_Sum ./ ((N_n-k_n));    % Pooled Covariance
-
-                eig_gamma_hat = eig(COV_Sum);
-                eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
-
-                q = k_n-1;
-                T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat, self.N_simul);
-
-                % calculate Denominator
-                S_null = zeros(self.N_simul, 1);
-                S_ii = S_ii(mask);
-                for i=1:k_n
-                        eig_gamma_hat = eig(S_ii{i});
-                        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat > 0);                      
-                        S_temp = functionalANOVA.Chi_sq_mixture( g_n(i) - 1, eig_gamma_hat, self.N_simul);
-                        S_temp = (S_temp * A_n_ii(i)) ./ (g_n(i) - 1); % EQ (9.53) and EQ (9.98)
-                        S_null = S_null + S_temp;
-                end
-
-                F_null = T_null ./ S_null;
-                F_NullFitted = fitdist(F_null, "Kernel");
-                pvalue = 1 - F_NullFitted.cdf(f_stat);
-
-                pstat=[f_stat, pvalue];
-            otherwise
-                pstat=[f_stat, nan];
+        build_Covar_star = zeros(self.n_domain_points, 0);
+        COV_Sum = 0;
+        for i=1:k
+            if mask(i)
+                iflag=(aflag==aflag0(i));
+                yi=yy(iflag,:);
+                gsize(i,:)=size(yi,1);
+                ni=gsize(i);
+                mui=mean(yi);
+                vmu=[vmu;mui];
+                ri=yi-ones(ni,1)*mui;
+                COV_Sum = COV_Sum +  ( cov(ri) * (ni-1) );
+                build_Covar_star = [build_Covar_star; ri];
+            end
         end
+        g_n = gsize(mask);               % subset of cell size
+        N_n = sum(g_n);                  % Total from pair cell-size
+        k_n = numel(g_n);                % Dimension space
+
+        COV_Sum = COV_Sum ./ ((N_n-k_n));    % Pooled Covariance
+
+        eig_gamma_hat = eig(COV_Sum);
+        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
+
+        switch self.Hypothesis
+            case {'FAMILY', 'PAIRWISE'}
+                q = k_n-1;
+            case {'PRIMARY','SECONDARY','INTERACTION'}
+                % key change: df equals the number of independent linear restrictions
+                q = rank(Contrast);  % fix
+        end
+
+        T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat, self.N_simul);
+
+        % calculate Denominator
+        S_null = zeros(self.N_simul, 1);
+        S_ii = S_ii(mask);
+        for i=1:k_n
+            eig_gamma_hat = eig(S_ii{i});
+            eig_gamma_hat = eig_gamma_hat(eig_gamma_hat > 0);
+            S_temp = functionalANOVA.Chi_sq_mixture( g_n(i) - 1, eig_gamma_hat, self.N_simul);
+            S_temp = (S_temp * A_n_ii(i)) ./ (g_n(i) - 1); % EQ (9.53) and EQ (9.98)
+            S_null = S_null + S_temp;
+        end
+
+        F_null = T_null ./ S_null;
+        F_NullFitted = fitdist(F_null, "Kernel");
+        pvalue = 1 - F_NullFitted.cdf(f_stat);
+
+        pstat=[f_stat, pvalue];
+
         % Equation 9.53 how the numerator,S_n, is distributed: One-Way
         % Equation 9.98 how the numerator,S_n, is distributed: Two-Way
 end
