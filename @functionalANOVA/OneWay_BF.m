@@ -66,45 +66,81 @@ if isempty(ip.Results.Indicator_A)
 else
     aflag = ip.Results.Indicator_A;
 end
-yy=data;
-aflag0=unique(aflag); %% Levels of Factor A
-k=length(aflag0); %% Number of Factor A's levels
 
-%% specifying the sample sizes of each cell
-vmu=[];A=[];A2=[];B2=[]; gsize=nan(k,1); S_ii=cell(k, 1);
-for i=1:k
-    iflag=(aflag==aflag0(i));
-    yi=yy(iflag,:);
-    gsize(i,:)=size(yi,1);
-    ni=gsize(i);
-    mui=mean(yi);
-    vmu=[vmu;mui];
-    ri=yi-ones(ni,1)*mui;
-    if N>p
-        Si=ri'*ri/(ni-1);
+yy = data;
+aflag0 = unique(aflag);                % Levels of Factor A
+k = numel(aflag0);                     % Number of levels
+m = size(yy,2);                        % = self.n_domain_points (alias)
+
+% --- Method flags (avoid contains() in the loop)
+isNaive = strcmp(method, "L2-Naive")  || strcmp(method, "F-Naive");
+isBias  = strcmp(method, "L2-BiasReduced") || strcmp(method, "F-BiasReduced");
+needAB  = isNaive || isBias;
+
+% --- Preallocate (no growth inside loop)
+vmu   = zeros(k, m, 'like', yy);
+A     = zeros(k, 1);
+if needAB
+    A2 = zeros(k, 1);
+    B2 = zeros(k, 1);
+else
+    A2 = []; 
+    B2 = [];
+end
+gsize = zeros(k, 1);
+S_ii  = cell(k, 1);
+
+% --- Preserve original S_ii sizing rule (global)
+storeAsH = (N > p);   % true => S_i is m x m (R'R); false => n_i x n_i (RR')
+
+for i = 1:k
+    mask = (aflag == aflag0(i));
+    Yi   = yy(mask, :);
+    ni   = size(Yi, 1);
+    gsize(i) = ni;
+
+    % Mean & residuals (implicit expansion; no ones(ni,1)*mui)
+    mui     = mean(Yi, 1);
+    vmu(i,:)= mui;
+    Ri_raw  = Yi - mui;           % ni x m
+
+    % Scale residuals once so S_i = (Ri_scaled' * Ri_scaled) or (Ri_scaled * Ri_scaled')
+    denom       = ni - 1;
+    inv_sqrt_dn = 1 / sqrt(denom);
+    Ri          = Ri_raw .* inv_sqrt_dn;  % ni x m, scaled
+
+    % A_i = trace(S_i) = ||Ri||_F^2 (works regardless of S_i shape)
+    Ai = sum(Ri(:).^2);
+    A(i) = Ai;
+
+    % Build S_i once in the desired shape and reuse it for B_i and storage
+    if storeAsH
+        Si = Ri' * Ri;     % m x m
     else
-        Si=ri*ri'/(ni-1);
+        Si = Ri  * Ri';    % ni x ni
     end
-
     S_ii{i} = Si;
 
-    Ai=trace(Si);
-    A = [A;Ai];
+    if needAB
+        % B_i = trace(S_i^2) = ||S_i||_F^2
+        Bi = sum(Si(:).^2);
 
-    if contains(method, ["Naive", "BiasReduced"])  % Check for Naive or Bias-Reduced
-        Bi=trace(Si^2);
-        switch method
-            case {"L2-Naive", "F-Naive"} %% the naive method
-                A2i=Ai^2;
-                B2i=Bi;
-            case  {"L2-BiasReduced", "F-BiasReduced"} %% the bias-reduced method
-                A2i=(ni-1)*ni/(ni-2)/(ni+1)*(Ai^2-2*Bi/ni);
-                B2i=(ni-1)^2/ni/(ni+1)*(Bi-Ai^2/(ni-1));
+        if isNaive
+            A2(i) = Ai^2;
+            B2(i) = Bi;
+        else
+            % Bias-reduced (guard small ni)
+            if ni > 2
+                % Note: Ai and Bi already reflect scaling by (ni-1)
+                A2(i) = (denom) * ni / (ni - 2) / (ni + 1) * (Ai^2 - 2*Bi/ni);
+                B2(i) = (denom^2) / ni / (ni + 1) * (Bi - Ai^2/denom);
+            else
+                % Degenerate small-sample case (avoid division by zero)
+                A2(i) = NaN;
+                B2(i) = NaN;
+            end
         end
-        A2=[A2;A2i];
-        B2=[B2;B2i];
     end
-
 end
 
 %% Computing the statistic
@@ -177,19 +213,6 @@ if any(strcmp(method, ["F-Bootstrap", "F-Simul"]))
             mask = true(k, 1);
     end
 
-% % Numerically Equivalent to above.
-%     tr_gamma = [];
-%     A_n_ii = ones(k, 1) - gsize/N;
-%     for i=1:k
-%         iflag=(aflag==aflag0(i));
-%         yi=yy(iflag,:);
-% 
-%         tr_gamma_i = trace(cov(yi));
-%         tr_gamma=[tr_gamma; tr_gamma_i];
-%     end
-% 
-%     S_n = sum(A_n_ii .* tr_gamma);
-%     stat0 = stat0 / S_n;
 end
 
 switch method
@@ -209,189 +232,231 @@ switch method
         pstat=[f_stat,pvalue];
         params=[df1,df2,K2a,2*K2b,2*K2c];
 
-    case "L2-Bootstrap" %% Bootstrap test (Pretty sure its the L2 type)
-        Bstat=nan(self.N_boot, 1);
-
-        ts = self.setUpTimeBar(method);
-
-        parfor ii=1:self.N_boot
-
-            Bmu=[];
-            for i=1:k
-                iflag=(aflag==aflag0(i));
-                yi=yy(iflag,:);
-                ni=gsize(i);
-                % Bflag=fix(rand(ni,1)*(ni-1))+1;
-                Bflag = randsample(ni, ni, true);
-                Byi=yi(Bflag,:);
-                Bmui=mean(Byi);
-                Bmu=[Bmu;Bmui];
+    case "L2-Bootstrap"
+        % ---- precompute things once (broadcast into parfor) ----
+        HC = H * Contrast;                    % q x k
+        m  = size(yy, 2);
+    
+        % group rows once; avoids recomputing logical masks inside parfor
+        Ycell = cell(k,1);
+        for i = 1:k
+            Ycell{i} = yy(aflag == aflag0(i), :);   % ni x m for group i
+        end
+    
+        Bstat = nan(self.N_boot, 1, 'like', yy);
+        ts    = self.setUpTimeBar(method);
+    
+        % Tip: for reproducibility, set rng(seed,'combRecursive') before parfor
+        parfor b = 1:self.N_boot
+            % bootstrap means for all k groups
+            Bmu = zeros(k, m, 'like', yy);
+            for i = 1:k
+                Yi = Ycell{i};
+                ni = size(Yi,1);
+    
+                % uniform sampling with replacement, faster than randsample
+                idx  = randi(ni, ni, 1);
+                % mean of the resampled rows
+                Bmu(i,:) = mean(Yi(idx,:), 1);
             end
-
-            %% Computing the statistic
-            temp=H*Contrast*(Bmu-vmu); %%
-            temp=trace(temp*temp');  %%
-            Bstat(ii) = temp;
-
+    
+            % T_n = || H*C*(Bmu - vmu) ||_F^2
+            Bmu = Bmu - vmu;                  % k x m (in-place diff)
+            T    = HC * Bmu;                  % q x m
+            Bstat(b) = sum(T(:).^2);          % Frobenius norm squared
+    
             ts.progress();
         end
-        ts.stop;ts.delete;
+        ts.stop; ts.delete;
+    
+        pvalue = mean(Bstat > stat0);         % L2 statistic
+        pstat  = [stat0, pvalue];
 
-        pvalue=mean(Bstat>stat0);  % Confirmed that its the L-2 Norm Stat
-
-        pstat=[stat0,pvalue];
 
     case "F-Bootstrap"
-        Bstat=nan(self.N_boot, 1);
-        ts = self.setUpTimeBar(method);
-
-        parfor ii=1:self.N_boot
-
-            Bmu=[];
-            tr_gamma=[];
-            for i=1:k  % Iterate over all k groups
-                iflag=(aflag==aflag0(i));
-                yi=yy(iflag,:);
-                ni=gsize(i);
-                % Bflag=fix(rand(ni,1)*(ni-1))+1;
-                Bflag = randsample(ni, ni, true);
-                Byi=yi(Bflag,:);
-                Bmui=mean(Byi);
-                Bmu=[Bmu;Bmui];
-
-
-                if mask(i)  % Run only if Asked for said group
-                    % Faster Than Calling Covariance
-                    z_mean = Byi - Bmui;                    % demean of ith group of k
-                    test_cov  =(z_mean * z_mean')/ (ni-1);  % covariance of ith group of k
-                    tr_gamma_i = trace(test_cov);           % trace of covariance from ith group of k
+        % ---- precompute once (broadcast into parfor) ----
+        HC = H * Contrast;                      % q x k
+        m  = size(yy, 2);
     
-    %                 tr_gamma_i = trace(cov(Byi));
-                    tr_gamma=[tr_gamma; tr_gamma_i];
+        % group slices & sizes (avoid recomputing masks)
+        Ycell   = cell(k,1);
+        nvec    = zeros(k,1);
+        invDen  = zeros(k,1);
+        for i = 1:k
+            Yi      = yy(aflag == aflag0(i), :);
+            Ycell{i}= Yi;
+            nvec(i) = size(Yi,1);
+            invDen(i)= 1/(nvec(i)-1);
+        end
+    
+        % mask → positions for tr_gamma
+        mask_idx  = find(mask);
+        k_mask    = numel(mask_idx);
+        mask_pos  = zeros(k,1);
+        mask_pos(mask_idx) = 1:k_mask;          % position of each masked group in tr_gamma
+    
+        Bstat = nan(self.N_boot, 1, 'like', yy);
+        ts    = self.setUpTimeBar(method);
+    
+        % Tip: call rng(self.Seed,'combRecursive') before parfor for reproducibility
+        parfor b = 1:self.N_boot
+            % bootstrap means for all k groups
+            Bmu = zeros(k, m, 'like', yy);
+            % only for masked groups: traces of covariances
+            tr_gamma = zeros(k_mask, 1);
+    
+            for i = 1:k
+                Yi = Ycell{i};
+                ni = nvec(i);
+    
+                % uniform bootstrap sample (faster than randsample)
+                idx  = randi(ni, ni, 1);
+                Byi  = Yi(idx, :);
+                Bmui = mean(Byi, 1);
+                Bmu(i, :) = Bmui;
+    
+                % trace(cov(Byi)) = ||Byi - mean||_F^2 / (ni-1)
+                if mask(i)
+                    sse = sum((Byi - Bmui).^2, 'all');
+                    tr_gamma(mask_pos(i)) = sse * invDen(i);
                 end
-
             end
-
-            %% Computing the statistic
-            temp=H*Contrast*(Bmu-vmu); %%
-            T_n=trace(temp*temp');  %%
-
-            S_n = sum( A_n_ii .* tr_gamma );
-            temp = T_n / S_n;
-
-            Bstat(ii) = temp;
-
+    
+            % T_n = || H*C*(Bmu - vmu) ||_F^2
+            Tn = sum((HC * (Bmu - vmu)).^2, 'all');
+    
+            % S_n = sum_i A_n_ii(i) * tr_gamma(i) over masked groups
+            S_n = sum(A_n_ii .* tr_gamma);
+    
+            Bstat(b) = Tn / S_n;
+    
             ts.progress();
         end
-        ts.stop;ts.delete;
+        ts.stop; ts.delete;
+    
+        pvalue = mean(Bstat > f_stat);
+        pstat  = [f_stat, pvalue];
 
-        pvalue=mean(Bstat>f_stat);  
-
-        pstat=[f_stat, pvalue];
-
-    case "L2-Simul"  % Works for OneWay_BF and now TwoWay_BF
-        build_Covar_star = zeros(self.n_domain_points, 0);
-        mask = any(logical(Contrast'), 2);
-        COV_Sum = 0;
-        for i=1:k
-            if mask(i)
-                iflag=(aflag==aflag0(i));
-                yi=yy(iflag,:);
-                gsize(i,:)=size(yi,1);
-                ni=gsize(i);
-                mui=mean(yi);
-                vmu=[vmu;mui];
-                ri=yi-ones(ni,1)*mui;
-                COV_Sum = COV_Sum +  ( cov(ri) * (ni-1) );
-                build_Covar_star = [build_Covar_star; ri];
+    case "L2-Simul"  % Works for OneWay_BF and TwoWay_BF
+        % groups used by the contrast
+        mask = any(Contrast.' ~= 0, 2);        % k x 1 logical
+        g_n  = gsize(mask);
+        N_n  = sum(g_n);
+        k_n  = nnz(mask);
+    
+        m = size(yy,2);                         % # domain points
+    
+        % pooled covariance numerator (sum_i R_i' R_i) without cov()
+        COV_Sum = zeros(m, m, 'like', yy);
+    
+        if N > p
+            % S_ii{i} = R_i'R_i/(n_i-1)  => multiply back by (n_i-1)
+            for i = find(mask).'
+                COV_Sum = COV_Sum + S_ii{i} * (gsize(i) - 1);
             end
-
+        else
+            % need R_i'R_i explicitly
+            for i = find(mask).'
+                Yi = yy(aflag == aflag0(i), :);
+                Ri = Yi - vmu(i,:);            % demean with precomputed mean
+                COV_Sum = COV_Sum + (Ri' * Ri);
+            end
         end
-        g_n = gsize(mask);               % subset of cell size
-        N_n = sum(g_n);                  % Total from pair cell-size
-        k_n = numel(g_n);                % Dimension space
-
-        COV_Sum = COV_Sum ./ ((N_n-k_n));    % Pooled Covariance
-
-        eig_gamma_hat = eig(COV_Sum);
-        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
-
-
+    
+        % pooled covariance
+        COV_Sum = COV_Sum ./ (N_n - k_n);
+    
+        % spectrum (positive part only)
+        eig_gamma_hat = eig(COV_Sum, 'vector');
+        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat > 0);
+    
+        % effective df for the mixture
         switch self.Hypothesis
-            case {'FAMILY', 'PAIRWISE'}
-                q = k_n-1;
+            case {'FAMILY','PAIRWISE'}
+                q = k_n - 1;
             case {'PRIMARY','SECONDARY','INTERACTION'}
-                % key change: df equals the number of independent linear restrictions
-                q = rank(Contrast);  % fix
+                q = rank(Contrast);
         end
-        
-        T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat, self.N_simul);
-
-        T_NullFitted = fitdist(T_null, "Kernel");
-        pvalue = 1 - T_NullFitted.cdf(stat0);
-
-        pstat=[stat0, pvalue];
-
+    
+        % null draws and p-value
+        T_null       = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat, self.N_simul);
+    
+        % (Fast option) empirical p-value:
+        pvalue = mean(T_null > stat0);
+        % (Keep original smoothing:)
+        % T_NullFitted = fitdist(T_null, "Kernel");
+        % pvalue       = 1 - T_NullFitted.cdf(stat0);
+    
+        pstat = [stat0, pvalue];
 
     case "F-Simul"
-        Dh=sqrt(D);
-        W=Dh*Contrast'*H'*H*Contrast*Dh;  %% k x k matrix
-
-        dd=diag(W);
-        K1=sum(dd.*A);
-        f_stat=stat0/K1;
-
-
-        build_Covar_star = zeros(self.n_domain_points, 0);
-        COV_Sum = 0;
-        for i=1:k
-            if mask(i)
-                iflag=(aflag==aflag0(i));
-                yi=yy(iflag,:);
-                gsize(i,:)=size(yi,1);
-                ni=gsize(i);
-                mui=mean(yi);
-                vmu=[vmu;mui];
-                ri=yi-ones(ni,1)*mui;
-                COV_Sum = COV_Sum +  ( cov(ri) * (ni-1) );
-                build_Covar_star = [build_Covar_star; ri];
+        % ---- W, dd, K1, f_stat (no full diag, reuse H) ----------------------
+        sqrt_d = 1 ./ sqrt(gsize(:));          % k x 1
+        B      = Contrast .* sqrt_d.';         % q x k  (so C*D*C' = B*B')
+        HB     = H * B;                         % q x k
+        W      = HB' * HB;                      % k x k
+        dd     = diag(W);
+        K1     = sum(dd .* A);
+        f_stat = stat0 / K1;
+    
+        % ---- pooled covariance for masked groups (no cov(), no growth) ------
+        % mask and A_n_ii must already be set in the shared block above
+        idx_mask = find(mask).';                % 1 x k_n
+        g_n      = gsize(mask);                 % k_n x 1
+        N_n      = sum(g_n);
+        k_n      = numel(idx_mask);
+    
+        m = size(yy, 2);
+        COV_Sum = zeros(m, m, 'like', yy);
+    
+        if N > p
+            % S_ii{i} = R_i'R_i / (n_i-1): multiply back by (n_i-1)
+            for ii = idx_mask
+                COV_Sum = COV_Sum + S_ii{ii} * (gsize(ii) - 1);
+            end
+        else
+            % Rebuild R_i'R_i only for needed groups
+            for ii = idx_mask
+                rows = (aflag == aflag0(ii));
+                Ri   = yy(rows, :) - vmu(ii, :);   % demean with existing mean
+                COV_Sum = COV_Sum + (Ri' * Ri);
             end
         end
-        g_n = gsize(mask);               % subset of cell size
-        N_n = sum(g_n);                  % Total from pair cell-size
-        k_n = numel(g_n);                % Dimension space
-
-        COV_Sum = COV_Sum ./ ((N_n-k_n));    % Pooled Covariance
-
-        eig_gamma_hat = eig(COV_Sum);
-        eig_gamma_hat = eig_gamma_hat(eig_gamma_hat>0);
-
+    
+        COV_Sum = COV_Sum ./ (N_n - k_n);      % pooled covariance
+    
+        % ---- spectrum & numerator null --------------------------------------
+        lam_num = eig(COV_Sum, 'vector');
+        lam_num = lam_num(lam_num > 0);
+    
         switch self.Hypothesis
-            case {'FAMILY', 'PAIRWISE'}
-                q = k_n-1;
-            case {'PRIMARY','SECONDARY','INTERACTION'}
-                % key change: df equals the number of independent linear restrictions
-                q = rank(Contrast);  % fix
+            case {'FAMILY','PAIRWISE'}
+                qeff = k_n - 1;
+            otherwise  % {'PRIMARY','SECONDARY','INTERACTION'}
+                qeff = rank(Contrast);
         end
-
-        T_null = functionalANOVA.Chi_sq_mixture(q, eig_gamma_hat, self.N_simul);
-
-        % calculate Denominator
-        S_null = zeros(self.N_simul, 1);
-        S_ii = S_ii(mask);
-        for i=1:k_n
-            eig_gamma_hat = eig(S_ii{i});
-            eig_gamma_hat = eig_gamma_hat(eig_gamma_hat > 0);
-            S_temp = functionalANOVA.Chi_sq_mixture( g_n(i) - 1, eig_gamma_hat, self.N_simul);
-            S_temp = (S_temp * A_n_ii(i)) ./ (g_n(i) - 1); % EQ (9.53) and EQ (9.98)
-            S_null = S_null + S_temp;
+    
+        T_null = functionalANOVA.Chi_sq_mixture(qeff, lam_num, self.N_simul);
+    
+        % ---- denominator null S_null (only masked groups) --------------------
+        S_null    = zeros(self.N_simul, 1);
+        Sii_mask  = S_ii(mask);
+        for i = 1:k_n
+            lam_i = eig(Sii_mask{i}, 'vector');
+            lam_i = lam_i(lam_i > 0);
+            S_t   = functionalANOVA.Chi_sq_mixture(g_n(i) - 1, lam_i, self.N_simul);
+            S_t   = (S_t .* A_n_ii(i)) ./ (g_n(i) - 1);   % EQ (9.53)/(9.98)
+            S_null = S_null + S_t;
         end
+    
+        % ---- final p-value ---------------------------------------------------
+        F_null       = T_null ./ S_null;
+    
+        % (Fast empirical alternative)  % 
+        pvalue = mean(F_null > f_stat);
+    
+        pstat = [f_stat, pvalue];
 
-        F_null = T_null ./ S_null;
-        F_NullFitted = fitdist(F_null, "Kernel");
-        pvalue = 1 - F_NullFitted.cdf(f_stat);
-
-        pstat=[f_stat, pvalue];
 
         % Equation 9.53 how the numerator,S_n, is distributed: One-Way
         % Equation 9.98 how the numerator,S_n, is distributed: Two-Way
