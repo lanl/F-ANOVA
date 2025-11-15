@@ -45,6 +45,10 @@ function [pvalue, stat] = OneWay_BF(self, method, data, Contrast, c, varargin)
 % Revised  Jan 10,   2013 NUS, Singapore
 % Modified May 26,   2023 Los Alamos National Laboratory, USA
 
+% spmd % Run once on each parallel worker
+%     rng(123, 'twister'); % Set the same seed and generator for all workers
+% end
+
 ip = inputParser;
 
 addRequired(ip, 'method', @(x) isstring(x)) 
@@ -298,7 +302,6 @@ switch method
         Bstat = nan(self.N_boot, 1, 'like', yy);
         ts    = self.setUpTimeBar(method);
     
-        % Tip: call rng(self.Seed,'combRecursive') before parfor for reproducibility
         parfor b = 1:self.N_boot
             % bootstrap means for all k groups
             Bmu = zeros(k, m, 'like', yy);
